@@ -294,9 +294,12 @@ screen navigation():
 
         spacing gui.navigation_spacing
 
+        textbutton _("Tests") action Start("tests_root")
+
         if main_menu:
 
             textbutton _("Start") action Start()
+
 
         else:
 
@@ -352,7 +355,8 @@ screen main_menu():
     ## This ensures that any other menu screen is replaced.
     tag menu
 
-    add gui.main_menu_background
+    #add gui.main_menu_background
+    add "main_menu_bg.jpg" xalign(1.0)  
 
     ## This empty frame darkens the main menu.
     frame:
