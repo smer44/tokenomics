@@ -294,7 +294,7 @@ screen navigation():
 
         spacing gui.navigation_spacing
 
-        textbutton _("Tests") action Start("tests_root")
+        textbutton _("Tests") action Start("tests_root")        
 
         if main_menu:
 
@@ -310,6 +310,8 @@ screen navigation():
         textbutton _("Load") action ShowMenu("load")
 
         textbutton _("Preferences") action ShowMenu("preferences")
+
+        textbutton _("Documents") action Start("documents")
 
         if _in_replay:
 

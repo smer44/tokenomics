@@ -1,0 +1,32 @@
+﻿I'm sorry, but an uncaught exception occurred.
+
+While running game code:
+  File "game/obj_load_md.rpy", line 88, in script
+    show screen readme_screen(game_rules_lines)
+  File "renpy/common/000statements.rpy", line 647, in execute_show_screen
+    renpy.show_screen(name, *args, **kwargs)
+Exception: Screen readme_screen is not known.
+
+
+-- Full Traceback ------------------------------------------------------------
+
+Full traceback:
+  File "game/obj_load_md.rpy", line 88, in script
+    show screen readme_screen(game_rules_lines)
+  File "C:\2022portable_programs\renpy-8.3.4-sdk\renpy\ast.py", line 1980, in execute
+    self.call("execute")
+  File "C:\2022portable_programs\renpy-8.3.4-sdk\renpy\ast.py", line 1959, in call
+    return renpy.statements.call(method, parsed, *args, **kwargs)
+  File "C:\2022portable_programs\renpy-8.3.4-sdk\renpy\statements.py", line 374, in call
+    return method(parsed, *args, **kwargs)
+  File "renpy/common/000statements.rpy", line 647, in execute_show_screen
+    renpy.show_screen(name, *args, **kwargs)
+  File "C:\2022portable_programs\renpy-8.3.4-sdk\renpy\display\screen.py", line 1325, in show_screen
+    raise Exception("Screen %s is not known.\n" % (name[0],))
+Exception: Screen readme_screen is not known.
+
+
+Windows-10-10.0.19045 AMD64
+Ren'Py 8.3.4.24120703
+tokenomics1 1.0
+Sat Feb  8 22:24:42 2025

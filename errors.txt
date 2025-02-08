@@ -1,0 +1,9 @@
+﻿I'm sorry, but errors were detected in your script. Please correct the
+errors listed below, and try again.
+
+
+File "game/obj_load_md.rpy", line 23: f-string: single '}' is not allowed
+        return f"\{{tag}\}\{{txt}\}\{/{closed_tag}\}"
+
+Ren'Py Version: Ren'Py 8.3.4.24120703
+Sat Feb  8 22:14:14 2025
