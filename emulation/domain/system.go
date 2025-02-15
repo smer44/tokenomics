@@ -1,128 +1,114 @@
 package domain
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/samber/lo"
 )
 
-type Tokens uint
-type Product uint
-type PowerType uint
-type Consumer uint
-type DegradationRate uint
-type Power struct {
-	t     PowerType
-	value uint
-}
-type OrderId string
+var ErrNotFound = errors.New("not found")
+var ErrWrongState = errors.New("wrong state")
 
-func (p Power) Comparable(a Power) bool {
-	return p.t == a.t
-}
+type SystemState uint
 
-func (p Power) Equal(a Power) bool {
-	if !p.Comparable(a) {
-		panic(fmt.Sprintf("product [%d] can't be compared with [%d]", p.t, a.t))
-	}
-	return p.value == a.value
-}
+const (
+	SystemStateOrdering SystemState = iota
+	SystemStateProducing
+)
 
 type System struct {
+	idGen           OrderIdGenerator
+	state           SystemState
+	emission        Tokens
 	investementPool Tokens
 	processSheets   map[Product]ProcessSheet
-	producingAgents map[Product]ProducingAgentImpl // single procuder for each type at the moment
-	orderingAgents  map[Consumer]OrderingAgentImpl
+	producingAgents map[PowerType]*ProducingAgent // single procuder for each type at the moment
+	orderingAgents  map[ConsumerId]*OrderingAgent
 }
 
-func NewSystem(ps []ProcessSheet, pa []ProducingAgentImpl, c []Consumer) *System {
-	return &System{
+func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []ProducingAgentConfig, c []Consumer) *System {
+	s := &System{
+		idGen,
+		SystemStateOrdering,
+		emission,
 		0,
 		lo.SliceToMap(ps, func(ps ProcessSheet) (Product, ProcessSheet) {
 			return ps.Product, ps
 		}),
-		lo.SliceToMap(pa, func(pa ProducingAgentImpl) (Product, ProducingAgentImpl) {
-			return pa.product, pa
+		lo.SliceToMap(pa, func(p ProducingAgentConfig) (PowerType, *ProducingAgent) {
+			return p.Type, &ProducingAgent{p.Id, p.Capacity, p.Degradation, p.Restoration, p.Upgrade, nil, nil}
 		}),
-		lo.SliceToMap(c, func(c Consumer) (Consumer, OrderingAgentImpl) {
-			return c, OrderingAgentImpl{[]*Order{}, map[OrderId]*Order{}}
+		lo.SliceToMap(c, func(c Consumer) (ConsumerId, *OrderingAgent) {
+			return c.Id(), &OrderingAgent{[]*Order{}, map[OrderId]*Order{}, c}
 		}),
 	}
+	s.startTurn()
+	return s
+}
+
+func (s *System) emit() {
+	s.investementPool = s.emission / 2
+	consumerTokens := s.emission / 2 / Tokens(len(s.orderingAgents))
+	for _, oa := range s.orderingAgents {
+		oa.consumer.Emit(consumerTokens)
+	}
+}
+
+func (s *System) placeOrders() {
+	for _, oa := range s.orderingAgents {
+		for _, request := range oa.consumer.Order() {
+			oa.PlaceOrder(s.idGen.New(), request, s.processSheets)
+		}
+	}
+}
+
+func (s *System) OrderingAgentView(id ConsumerId) (OrderingAgentView, error) {
+	if s.state != SystemStateOrdering {
+		return OrderingAgentView{}, ErrWrongState
+	}
+	agent, ok := s.orderingAgents[id]
+	if !ok {
+		return OrderingAgentView{}, ErrNotFound
+	}
+	return agent.View(), nil
+}
+
+func (s *System) OrderingAgentAction(id ConsumerId, cmd OrderingAgentCommand) error {
+	return nil
+}
+
+func (s *System) FixBids() {
+}
+
+type ProducingAgentView struct {
+}
+
+type ProducingAgentCommand struct {
+}
+
+func (s *System) ProducingAgentView(id ProducerId) (ProducingAgentView, error) {
+	return ProducingAgentView{}, nil
+}
+
+func (s *System) ProducingAgentAction(id ProducerId, cmd ProducingAgentCommand) error {
+	return nil
+}
+
+func (s *System) startTurn() {
+	s.emit()
+	s.placeOrders()
+	s.state = SystemStateOrdering
+}
+
+type TurnResult struct {
+}
+
+func (s *System) EndTurn() (TurnResult, error) {
+	s.startTurn()
+	return TurnResult{}, nil
 }
 
 type ProcessSheet struct {
-	Product Product           `json:"product"`
-	Parts   map[Product]Power `json:"parts"`
-}
-
-type OrderingAgentImpl struct {
-	incoming   []*Order
-	inProgress map[OrderId]*Order
-}
-
-type OrderingAgentState struct {
-	Incoming   []*Order
-	InProgress []*Order
-}
-
-func (a *OrderingAgentImpl) State() OrderingAgentState {
-	return OrderingAgentState{a.incoming, lo.Values(a.inProgress)}
-}
-
-type Restoration struct {
-	Required ProcessSheet
-	Power    Power
-}
-
-type Upgrade struct {
-	Required ProcessSheet
-	Power    Power
-}
-
-type Task struct {
-	OrderId OrderId
-	Agent   *OrderingAgentImpl
-}
-
-type Bid struct {
-	Power   Power
-	Tokens  Tokens
-	OrderId OrderId
-	Agent   *OrderingAgentImpl
-}
-
-type ProducingAgentImpl struct {
-	product     Product
-	capacity    Power
-	degradation DegradationRate
-	bids        []Bid // replace with MaxHeap
-	restoration Restoration
-	upgrade     Upgrade
-	inProgress  []Task
-}
-
-func NewProducingAgent(product Product, capacity Power, degradation DegradationRate, restoration Restoration, upgrade Upgrade) *ProducingAgentImpl {
-	return &ProducingAgentImpl{product, capacity, degradation, []Bid{}, restoration, upgrade, []Task{}}
-}
-
-type Part struct {
-	Required Power
-	Ready    Power
-}
-
-type Order struct {
-	Id     OrderId
-	Tokens Tokens
-	Parts  map[Product]Part
-}
-
-func NewOrder(id OrderId, t Tokens, ps *ProcessSheet) *Order {
-	if t <= 0 {
-		panic("tokens must be greater than 0")
-	}
-	parts := make(map[Product]Part, len(ps.Parts))
-	for p, v := range ps.Parts {
-		parts[p] = Part{v, Power{p, 0}}
-	}
-	return &Order{id, t, parts}
+	Product Product             `json:"product"`
+	Require map[PowerType]Power `json:"require"`
 }
