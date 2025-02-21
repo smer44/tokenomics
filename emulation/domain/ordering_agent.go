@@ -21,7 +21,7 @@ type Request struct {
 type OrderingAgentView struct {
 	Incoming   map[OrderId]Request
 	InProgress map[OrderId]Request
-	Producers  map[ProducerId]ProducerInfo
+	Producers  map[PowerType][]ProducerInfo
 }
 
 type OrderingAgentCommand struct {
@@ -42,12 +42,14 @@ func (oa *OrderingAgent) PlaceOrder(id OrderId, r ProductRequest, pss map[Produc
 	oa.incoming = append(oa.incoming, newOrder(id, r.Tokens, &ps))
 }
 
-func (oa *OrderingAgent) View() OrderingAgentView {
-	return OrderingAgentView{
+func (oa *OrderingAgent) View(producers map[ProducerId]*ProducingAgent) OrderingAgentView {
+	powers := map[PowerType]struct{}{}
+	result := OrderingAgentView{
 		Incoming: lo.SliceToMap(oa.incoming, func(o *Order) (OrderId, Request) {
 			return o.Id, Request{
 				Tokens: o.Tokens,
 				Powers: lo.MapToSlice(o.Parts, func(pt PowerType, part Part) PowerValue {
+					powers[pt] = struct{}{}
 					return PowerValue{pt, part.Remains()}
 				}),
 			}
@@ -56,11 +58,21 @@ func (oa *OrderingAgent) View() OrderingAgentView {
 			return o.Id, Request{
 				Tokens: o.Tokens,
 				Powers: lo.MapToSlice(o.Parts, func(pt PowerType, part Part) PowerValue {
+					powers[pt] = struct{}{}
 					return PowerValue{pt, part.Remains()}
 				}),
 			}
 		}),
 	}
+	result.Producers = make(map[PowerType][]ProducerInfo, len(powers))
+	for _, p := range producers {
+		_, ok := powers[p.powerType]
+		if !ok {
+			continue
+		}
+		result.Producers[p.powerType] = append(result.Producers[p.powerType], p.Info())
+	}
+	return result
 }
 
 type Part struct {

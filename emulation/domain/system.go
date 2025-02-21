@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/samber/lo"
 )
@@ -22,7 +23,8 @@ type System struct {
 	emission        Tokens
 	investementPool Tokens
 	processSheets   map[Product]ProcessSheet
-	producingAgents map[PowerType]*ProducingAgent // single procuder for each type at the moment
+	powerProviders  map[PowerType][]ProducerId // single procuder for each type at the moment
+	producers       map[ProducerId]*ProducingAgent
 	orderingAgents  map[ConsumerId]*OrderingAgent
 }
 
@@ -35,8 +37,12 @@ func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []
 		lo.SliceToMap(ps, func(ps ProcessSheet) (Product, ProcessSheet) {
 			return ps.Product, ps
 		}),
-		lo.SliceToMap(pa, func(p ProducingAgentConfig) (PowerType, *ProducingAgent) {
-			return p.Type, &ProducingAgent{p.Id, p.Capacity, p.Degradation, p.Restoration, p.Upgrade, nil, nil}
+		// DO FOR MULTIPLE PRODUCERS WITH SAME POWER TYPE
+		lo.SliceToMap(pa, func(p ProducingAgentConfig) (PowerType, []ProducerId) {
+			return p.Type, []ProducerId{p.Id}
+		}),
+		lo.SliceToMap(pa, func(p ProducingAgentConfig) (ProducerId, *ProducingAgent) {
+			return p.Id, newProducingAgent(p)
 		}),
 		lo.SliceToMap(c, func(c Consumer) (ConsumerId, *OrderingAgent) {
 			return c.Id(), &OrderingAgent{[]*Order{}, map[OrderId]*Order{}, c}
@@ -70,24 +76,46 @@ func (s *System) OrderingAgentView(id ConsumerId) (OrderingAgentView, error) {
 	if !ok {
 		return OrderingAgentView{}, ErrNotFound
 	}
-	return agent.View(), nil
+	return agent.View(s.producers), nil
 }
 
 func (s *System) OrderingAgentAction(id ConsumerId, cmd OrderingAgentCommand) error {
+	if s.state != SystemStateOrdering {
+		return ErrWrongState
+	}
+	for p, bids := range cmd.Bids {
+		producer, ok := s.producers[p]
+		if !ok {
+			return fmt.Errorf("%w: producer [%d]", ErrNotFound, p)
+		}
+		producer.PlaceBids(bids)
+	}
 	return nil
 }
 
-func (s *System) FixBids() {
-}
-
-type ProducingAgentView struct {
+func (s *System) FixBids() error {
+	if s.state != SystemStateOrdering {
+		return ErrWrongState
+	}
+	for _, p := range s.producers {
+		p.FixBids()
+	}
+	s.state = SystemStateProducing
+	return nil
 }
 
 type ProducingAgentCommand struct {
 }
 
 func (s *System) ProducingAgentView(id ProducerId) (ProducingAgentView, error) {
-	return ProducingAgentView{}, nil
+	if s.state != SystemStateProducing {
+		return ProducingAgentView{}, ErrWrongState
+	}
+	p, ok := s.producers[id]
+	if !ok {
+		return ProducingAgentView{}, ErrNotFound
+	}
+	return p.View(), nil
 }
 
 func (s *System) ProducingAgentAction(id ProducerId, cmd ProducingAgentCommand) error {
