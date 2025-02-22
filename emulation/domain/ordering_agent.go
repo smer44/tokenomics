@@ -8,20 +8,20 @@ import (
 
 type OrderId string
 
-type PowerValue struct {
-	Type  PowerType
-	Power Power
+type CapacityValue struct {
+	Type  CapacityType
+	Power Capacity
 }
 
 type Request struct {
-	Tokens Tokens
-	Powers []PowerValue
+	Tokens     Tokens
+	Capacities []CapacityValue
 }
 
 type OrderingAgentView struct {
 	Incoming   map[OrderId]Request
 	InProgress map[OrderId]Request
-	Producers  map[PowerType][]ProducerInfo
+	Producers  map[CapacityType][]ProducerInfo
 }
 
 type OrderingAgentCommand struct {
@@ -43,28 +43,28 @@ func (oa *OrderingAgent) PlaceOrder(id OrderId, r ProductRequest, pss map[Produc
 }
 
 func (oa *OrderingAgent) View(producers map[ProducerId]*ProducingAgent) OrderingAgentView {
-	powers := map[PowerType]struct{}{}
+	powers := map[CapacityType]struct{}{}
 	result := OrderingAgentView{
 		Incoming: lo.SliceToMap(oa.incoming, func(o *Order) (OrderId, Request) {
 			return o.Id, Request{
 				Tokens: o.Tokens,
-				Powers: lo.MapToSlice(o.Parts, func(pt PowerType, part Part) PowerValue {
+				Capacities: lo.MapToSlice(o.Parts, func(pt CapacityType, part Part) CapacityValue {
 					powers[pt] = struct{}{}
-					return PowerValue{pt, part.Remains()}
+					return CapacityValue{pt, part.Remains()}
 				}),
 			}
 		}),
 		InProgress: lo.SliceToMap(lo.Values(oa.inProgress), func(o *Order) (OrderId, Request) {
 			return o.Id, Request{
 				Tokens: o.Tokens,
-				Powers: lo.MapToSlice(o.Parts, func(pt PowerType, part Part) PowerValue {
+				Capacities: lo.MapToSlice(o.Parts, func(pt CapacityType, part Part) CapacityValue {
 					powers[pt] = struct{}{}
-					return PowerValue{pt, part.Remains()}
+					return CapacityValue{pt, part.Remains()}
 				}),
 			}
 		}),
 	}
-	result.Producers = make(map[PowerType][]ProducerInfo, len(powers))
+	result.Producers = make(map[CapacityType][]ProducerInfo, len(powers))
 	for _, p := range producers {
 		_, ok := powers[p.powerType]
 		if !ok {
@@ -76,18 +76,18 @@ func (oa *OrderingAgent) View(producers map[ProducerId]*ProducingAgent) Ordering
 }
 
 type Part struct {
-	Required Power
-	Consumed Power
+	Required Capacity
+	Consumed Capacity
 }
 
-func (p Part) Remains() Power {
+func (p Part) Remains() Capacity {
 	return p.Required - p.Consumed
 }
 
 type Order struct {
 	Id     OrderId
 	Tokens Tokens
-	Parts  map[PowerType]Part
+	Parts  map[CapacityType]Part
 }
 
 type OrderIdGenerator interface {
@@ -98,7 +98,7 @@ func newOrder(id OrderId, t Tokens, ps *ProcessSheet) *Order {
 	if t <= 0 {
 		panic("tokens must be greater than 0")
 	}
-	parts := make(map[PowerType]Part, len(ps.Require))
+	parts := make(map[CapacityType]Part, len(ps.Require))
 	for p, v := range ps.Require {
 		parts[p] = Part{v, 0}
 	}

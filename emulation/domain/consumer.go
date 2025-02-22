@@ -1,6 +1,6 @@
 package domain
 
-type ConsumerId uint
+type ConsumerId string
 
 type ProductRequest struct {
 	Product Product

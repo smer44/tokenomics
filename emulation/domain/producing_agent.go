@@ -1,124 +1,160 @@
 package domain
 
 import (
+	"math"
 	"slices"
 
 	"github.com/samber/lo"
 )
 
-type ProducerId uint
+type ProducerId string
 
 type DegradationRate uint
 
 type Restoration struct {
-	Require ProcessSheet
-	Power   Power
+	Require  ProcessSheet
+	Restores Capacity
 }
 
 type Upgrade struct {
-	Require ProcessSheet
-	Power   Power
+	Require   ProcessSheet
+	Increases Capacity
 }
 
-type Task struct {
+type Booking struct {
 	OrderId OrderId
-	Remains Power
+	Booked  Capacity
 }
 
 type ProducerInfo struct {
 	Id          ProducerId
-	PowerType   PowerType
-	Capacity    Power
-	CutOffPrice Tokens
+	PowerType   CapacityType
+	Capacity    Capacity
+	CutOffPrice CapacityUnitPrice
 }
 
 type ProducingAgentConfig struct {
 	Id          ProducerId
-	Type        PowerType
-	Capacity    Power
+	Type        CapacityType
+	Capacity    Capacity
 	Degradation DegradationRate
 	Restoration Restoration
 	Upgrade     Upgrade
 }
 
 type Bid struct {
-	Power   Power
-	Tokens  Tokens
-	OrderId OrderId
+	Capacity Capacity
+	Tokens   Tokens
+	OrderId  OrderId
 }
 
-func (b Bid) PowerUnitPrice() Tokens {
-	return Tokens(float32(b.Power) / float32(b.Tokens))
+type CapacityUnitPrice float32
+
+func (a CapacityUnitPrice) Equal(b CapacityUnitPrice) bool {
+	return math.Abs(float64(a-b)) <= 1e-5
+}
+
+func (b Bid) CapacityUnitPrice() CapacityUnitPrice {
+	return CapacityUnitPrice(float32(b.Tokens) / float32(b.Capacity))
 }
 
 func newProducingAgent(config ProducingAgentConfig) *ProducingAgent {
 	return &ProducingAgent{
-		config.Id, config.Type, config.Degradation, config.Restoration, config.Upgrade, config.Capacity, nil, Task{}, nil, 0, 0, 0,
+		config.Id, config.Type, config.Degradation, config.Restoration, config.Upgrade,
+		producerState{config.Capacity, nil, nil, 0, 0, 0},
 	}
+}
+
+type producerState struct {
+	capacity          Capacity
+	bids              []Bid // replace with MaxHeap
+	inProgress        *Booking
+	requestedCapacity Capacity
+	funds             Tokens
+	cutOffPrice       CapacityUnitPrice
 }
 
 type ProducingAgent struct {
-	// static data
 	id          ProducerId
-	powerType   PowerType
+	powerType   CapacityType
 	degradation DegradationRate
 	restoration Restoration
 	upgrade     Upgrade
-	// dynamic data
-	capacity          Power
-	bids              []Bid // replace with MaxHeap
-	inProgress        Task
-	taken             []Task
-	cutOffPrice       Tokens
-	requestedCapacity Power
-	funds             Tokens
+	state       producerState
 }
 
 func (p *ProducingAgent) Info() ProducerInfo {
-	return ProducerInfo{p.id, p.powerType, p.capacity, p.cutOffPrice}
+	return ProducerInfo{p.id, p.powerType, p.state.capacity, p.state.cutOffPrice}
 }
 
-func (p *ProducingAgent) powerDegradation() Power {
-	return Power(float32(p.capacity) / 100 * float32(p.degradation))
+func (p *ProducingAgent) powerDegradation() Capacity {
+	return Capacity(math.Ceil(float64(p.degradation) * float64(p.state.capacity) / 100))
 }
 
 func (p *ProducingAgent) View() ProducingAgentView {
-	return ProducingAgentView{p.id, p.capacity, p.requestedCapacity, p.powerDegradation(), p.upgrade.Power, p.funds}
+	return ProducingAgentView{p.id, p.state.capacity, p.state.requestedCapacity, p.powerDegradation(), p.upgrade.Increases, p.state.funds}
 }
 
 func (p *ProducingAgent) PlaceBids(bids []Bid) {
-	p.bids = append(p.bids, bids...)
+	p.state.bids = append(p.state.bids, bids...)
 }
 
-func (p *ProducingAgent) FixBids() {
-	// sorting slice descending by the power unit price
-	slices.SortFunc(p.bids, func(a, b Bid) int {
-		if a.PowerUnitPrice() > b.PowerUnitPrice() {
-			return -1
-		}
-		if a.PowerUnitPrice() < b.PowerUnitPrice() {
+type ProductionResult struct {
+	Completed []OrderId
+	Rejected  []OrderId
+}
+
+func (p *ProducingAgent) Produce() ProductionResult {
+	// sorting slice in descending order by the capacity unit price (most valuable come first)
+	slices.SortFunc(p.state.bids, func(a, b Bid) int {
+		if a.CapacityUnitPrice() < b.CapacityUnitPrice() {
 			return 1
 		}
-		return 0
+		return -1
 	})
-	p.requestedCapacity = lo.SumBy(p.bids, func(b Bid) Power {
-		return b.Power
+	requestedCapacity := lo.SumBy(p.state.bids, func(b Bid) Capacity {
+		return b.Capacity
 	})
-	remains := int(p.capacity) - int(p.inProgress.Remains)
-	p.taken = []Task{}
-	for i := 0; remains > 0 && i < len(p.bids); i++ {
-		bid := p.bids[i]
-		p.taken = append(p.taken, Task{bid.OrderId, bid.Power})
-		remains -= int(bid.Power)
+	remainingCapacity := int(p.state.capacity)
+	completed := []OrderId{}
+	rejected := []OrderId{}
+	cutOffPrice := p.state.cutOffPrice
+	funds := Tokens(0)
+	inProgress := p.state.inProgress
+	if inProgress != nil {
+		remainingCapacity -= int(inProgress.Booked)
+		if remainingCapacity >= 0 {
+			completed = append(completed, inProgress.OrderId)
+			inProgress = nil
+		} else {
+			inProgress = &Booking{inProgress.OrderId, inProgress.Booked - p.state.capacity}
+		}
 	}
-	p.bids = nil
+	for i := range p.state.bids {
+		if remainingCapacity > 0 {
+			bid := p.state.bids[i]
+			// fmt.Printf("rcap: %d tokens: %d cup: %f\n", bid.Capacity, bid.Tokens, bid.CapacityUnitPrice())
+			cutOffPrice = bid.CapacityUnitPrice()
+			funds += bid.Tokens
+			remainingCapacity -= int(bid.Capacity)
+			if remainingCapacity >= 0 {
+				completed = append(completed, bid.OrderId)
+			} else {
+				inProgress = &Booking{bid.OrderId, Capacity(-remainingCapacity)}
+			}
+			continue
+		}
+		rejected = append(rejected, p.state.bids[i].OrderId)
+	}
+	p.state = producerState{p.state.capacity, nil, inProgress, requestedCapacity, funds, cutOffPrice}
+	return ProductionResult{completed, rejected}
 }
 
 type ProducingAgentView struct {
 	Id                ProducerId
-	TotalCapacity     Power
-	RequestedCapacity Power
-	Degradation       Power
-	Upgrade           Power
+	TotalCapacity     Capacity
+	RequestedCapacity Capacity
+	Degradation       Capacity
+	Upgrade           Capacity
 	Funds             Tokens
 }
