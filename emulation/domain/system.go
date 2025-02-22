@@ -77,12 +77,6 @@ func (s *System) OrderingAgentAction(id ConsumerId, cmd OrderingAgentCommand) er
 	return nil
 }
 
-type ProducingAgentCommand struct {
-	Funds   Tokens
-	Restore uint
-	Upgrade uint
-}
-
 func (s *System) ProducingAgentView(id ProducerId) (ProducingAgentView, error) {
 	p, ok := s.producers[id]
 	if !ok {

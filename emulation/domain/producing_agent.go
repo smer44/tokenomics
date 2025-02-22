@@ -61,12 +61,13 @@ func (b Bid) CapacityUnitPrice() CapacityUnitPrice {
 func newProducingAgent(config ProducingAgentConfig) *ProducingAgent {
 	return &ProducingAgent{
 		config.Id, config.Type, config.Degradation, config.Restoration, config.Upgrade,
-		producerState{config.Capacity, nil, nil, 0, 0, 0},
+		producerState{config.Capacity, config.Capacity, nil, nil, 0, 0, 0}, consumerState{},
 	}
 }
 
 type producerState struct {
 	capacity          Capacity
+	maxCapacity       Capacity
 	bids              []Bid // replace with MaxHeap
 	inProgress        *Booking
 	requestedCapacity Capacity
@@ -74,29 +75,35 @@ type producerState struct {
 	cutOffPrice       CapacityUnitPrice
 }
 
+type consumerState struct {
+	requestedUpgrades uint
+	requestedRestores uint
+}
+
 type ProducingAgent struct {
-	id          ProducerId
-	powerType   CapacityType
-	degradation DegradationRate
-	restoration Restoration
-	upgrade     Upgrade
-	state       producerState
+	id            ProducerId
+	powerType     CapacityType
+	degradation   DegradationRate
+	restoration   Restoration
+	upgrade       Upgrade
+	producerState producerState
+	consumerState consumerState
 }
 
 func (p *ProducingAgent) Info() ProducerInfo {
-	return ProducerInfo{p.id, p.powerType, p.state.capacity, p.state.cutOffPrice}
+	return ProducerInfo{p.id, p.powerType, p.producerState.capacity, p.producerState.cutOffPrice}
 }
 
-func (p *ProducingAgent) powerDegradation() Capacity {
-	return Capacity(math.Ceil(float64(p.degradation) * float64(p.state.capacity) / 100))
+func (p *ProducingAgent) capacityDegradation() Capacity {
+	return Capacity(math.Ceil(float64(p.degradation) * float64(p.producerState.capacity) / 100))
 }
 
 func (p *ProducingAgent) View() ProducingAgentView {
-	return ProducingAgentView{p.id, p.state.capacity, p.state.requestedCapacity, p.powerDegradation(), p.upgrade.Increases, p.state.funds}
+	return ProducingAgentView{p.id, p.producerState.capacity, p.producerState.requestedCapacity, p.capacityDegradation(), p.upgrade.Increases, p.producerState.funds}
 }
 
 func (p *ProducingAgent) PlaceBids(bids []Bid) {
-	p.state.bids = append(p.state.bids, bids...)
+	p.producerState.bids = append(p.producerState.bids, bids...)
 }
 
 type ProductionResult struct {
@@ -104,36 +111,93 @@ type ProductionResult struct {
 	Rejected  []OrderId
 }
 
+type Upgrades uint
+type Restores uint
+
+type UpgradeRequest struct {
+	SelfFunds Tokens
+	Loan      Tokens
+	Upgrade   Upgrade
+}
+
+type RestoreRequest struct {
+	SelfFunds   Tokens
+	Loan        Tokens
+	Restoration Restoration
+}
+
+type ProducingAgentCommand struct {
+	Loan      Tokens
+	DoUpgrade bool
+	DoRestore bool
+}
+
+func (p *ProducingAgent) Invest(cmd ProducingAgentCommand) (*UpgradeRequest, *RestoreRequest) {
+	var upgrade *UpgradeRequest
+	var restore *RestoreRequest
+	loan := cmd.Loan
+	funds := p.producerState.funds
+	if cmd.DoUpgrade && cmd.DoRestore {
+		loan /= 2
+		funds /= 2
+	}
+	if cmd.DoUpgrade {
+		p.consumerState.requestedUpgrades++
+		upgrade = &UpgradeRequest{funds, loan, p.upgrade}
+	}
+	if cmd.DoRestore {
+		p.consumerState.requestedRestores++
+		restore = &RestoreRequest{funds, loan, p.restoration}
+	}
+	return upgrade, restore
+}
+
+func (p *ProducingAgent) CompleteUpgrade() {
+	if p.consumerState.requestedUpgrades == 0 {
+		panic("no updgrades requested")
+	}
+	p.consumerState.requestedUpgrades--
+	p.producerState.maxCapacity += p.upgrade.Increases
+	p.producerState.capacity += p.upgrade.Increases
+}
+
+func (p *ProducingAgent) CompleteRestore() {
+	if p.consumerState.requestedRestores == 0 {
+		panic("no restores requested")
+	}
+	p.consumerState.requestedRestores--
+	p.producerState.capacity = min(p.producerState.maxCapacity, p.producerState.capacity+p.restoration.Restores)
+}
+
 func (p *ProducingAgent) Produce() ProductionResult {
-	// sorting slice in descending order by the capacity unit price (most valuable come first)
-	slices.SortFunc(p.state.bids, func(a, b Bid) int {
+	// sorting bids in descending order by the capacity unit price (most valuable come first)
+	slices.SortFunc(p.producerState.bids, func(a, b Bid) int {
 		if a.CapacityUnitPrice() < b.CapacityUnitPrice() {
 			return 1
 		}
 		return -1
 	})
-	requestedCapacity := lo.SumBy(p.state.bids, func(b Bid) Capacity {
+	requestedCapacity := lo.SumBy(p.producerState.bids, func(b Bid) Capacity {
 		return b.Capacity
 	})
-	remainingCapacity := int(p.state.capacity)
+	remainingCapacity := int(p.producerState.capacity)
 	completed := []OrderId{}
 	rejected := []OrderId{}
-	cutOffPrice := p.state.cutOffPrice
+	cutOffPrice := p.producerState.cutOffPrice
 	funds := Tokens(0)
-	inProgress := p.state.inProgress
+	inProgress := p.producerState.inProgress
 	if inProgress != nil {
 		remainingCapacity -= int(inProgress.Booked)
 		if remainingCapacity >= 0 {
 			completed = append(completed, inProgress.OrderId)
 			inProgress = nil
 		} else {
-			inProgress = &Booking{inProgress.OrderId, inProgress.Booked - p.state.capacity}
+			inProgress = &Booking{inProgress.OrderId, inProgress.Booked - p.producerState.capacity}
 		}
 	}
-	for i := range p.state.bids {
+	for i := range p.producerState.bids {
 		if remainingCapacity > 0 {
-			bid := p.state.bids[i]
-			// fmt.Printf("rcap: %d tokens: %d cup: %f\n", bid.Capacity, bid.Tokens, bid.CapacityUnitPrice())
+			bid := p.producerState.bids[i]
 			cutOffPrice = bid.CapacityUnitPrice()
 			funds += bid.Tokens
 			remainingCapacity -= int(bid.Capacity)
@@ -144,9 +208,9 @@ func (p *ProducingAgent) Produce() ProductionResult {
 			}
 			continue
 		}
-		rejected = append(rejected, p.state.bids[i].OrderId)
+		rejected = append(rejected, p.producerState.bids[i].OrderId)
 	}
-	p.state = producerState{p.state.capacity, nil, inProgress, requestedCapacity, funds, cutOffPrice}
+	p.producerState = producerState{p.producerState.capacity, p.producerState.capacity, nil, inProgress, requestedCapacity, funds, cutOffPrice}
 	return ProductionResult{completed, rejected}
 }
 
