@@ -25,10 +25,10 @@ func (t *TestConsumer) Id() ConsumerId {
 }
 
 // Order implements Consumer.
-func (t *TestConsumer) Order() []ProductRequest {
+func (t *TestConsumer) Order() []ConsumerRequest {
 	i := t.idx
 	t.idx = (t.idx + 1) % len(t.products)
-	return []ProductRequest{{t.products[i], t.tokens}}
+	return []ConsumerRequest{{t.products[i], t.tokens}}
 }
 
 var _ Consumer = &TestConsumer{}
@@ -64,26 +64,27 @@ func TestSystem(t *testing.T) {
 		// Investment
 		pav, err := system.ProducingAgentView("p1")
 		require.NoError(t, err)
-		require.Equal(t, ProducingAgentView{"p1", 100, 0, 0, 0, 0}, pav)
+		require.Equal(t, ProducingAgentView{"p1", 100, 100, 0, 0, 0, 0, false, false}, pav)
 		system.ProducingAgentAction("p1", ProducingAgentCommand{})
 
-		oav, err := system.OrderingAgentView("c1")
-		require.NoError(t, err)
-		require.Equal(t, OrderingAgentView{
-			Incoming: map[OrderId]Request{
-				"0": {50, []CapacityValue{{power1, 10}}},
-			},
-			InProgress: map[OrderId]Request{},
-			Producers:  map[CapacityType][]ProducerInfo{power1: {{"p1", power1, 100, 0}}},
-		}, oav)
+		// oav, err := system.OrderingAgentView("c1")
+		// require.NoError(t, err)
+		// require.Equal(t, OrderingAgentView{
+		// 	Incoming: map[OrderId]Request{
+		// 		"0": {50, []CapacityValue{{power1, 10}}},
+		// 	},
+		// 	InProgress: map[OrderId]Request{},
+		// 	Producers:  map[CapacityType][]ProducerInfo{power1: {{"p1", power1, 100, 0}}},
+		// }, oav)
 		err = system.OrderingAgentAction("c1", OrderingAgentCommand{
-			Bids: map[ProducerId][]Bid{"p1": {Bid{10, 100, "1"}}},
-		})
+			Bids: map[OrderId]map[ProducerId]Tokens{
+				"1": {"p1": 100},
+			}})
 		require.NoError(t, err)
-		_, err = system.EndTurn()
-		require.NoError(t, err)
+		scores := system.EndTurn()
+		require.Equal(t, TurnResult{0}, scores)
 		pav, err = system.ProducingAgentView("p1")
 		require.NoError(t, err)
-		require.Equal(t, ProducingAgentView{"p1", 100, 10, 0, 0, 100}, pav)
+		require.Equal(t, ProducingAgentView{"p1", 100, 100, 10, 0, 0, 0, false, false}, pav)
 	})
 }

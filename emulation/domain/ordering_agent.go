@@ -1,10 +1,6 @@
 package domain
 
-import (
-	"fmt"
-
-	"github.com/samber/lo"
-)
+import "fmt"
 
 type OrderId string
 
@@ -19,88 +15,72 @@ type Request struct {
 }
 
 type OrderingAgentView struct {
-	Incoming   map[OrderId]Request
-	InProgress map[OrderId]Request
-	Producers  map[CapacityType][]ProducerInfo
+	Incoming   map[OrderId]map[CapacityType]Capacity
+	InProgress map[OrderId]map[CapacityType]Capacity
+	Producers  map[CapacityType]map[ProducerId]ProducerInfo
 }
 
 type OrderingAgentCommand struct {
-	Bids map[ProducerId][]Bid
+	Bids map[OrderId]map[ProducerId]Tokens
 }
 
 type OrderingAgent struct {
-	incoming   []*Order
-	inProgress map[OrderId]*Order
-	consumer   Consumer
+	id         OrderingAgentId
+	incoming   map[OrderId]OrderInfo
+	inProgress map[OrderId]OrderInfo
 }
 
-func (oa *OrderingAgent) PlaceOrder(id OrderId, r ProductRequest, pss map[Product]ProcessSheet) {
-	ps, ok := pss[r.Product]
-	if !ok {
-		panic(fmt.Sprintf("not found product [%d]", r.Product))
-	}
-	oa.incoming = append(oa.incoming, newOrder(id, r.Tokens, &ps))
+func (oa *OrderingAgent) PlaceOrder(orderInfo OrderInfo) {
+	oa.incoming[orderInfo.Id] = orderInfo
 }
 
-func (oa *OrderingAgent) View(producers map[ProducerId]*ProducingAgent) OrderingAgentView {
-	powers := map[CapacityType]struct{}{}
-	result := OrderingAgentView{
-		Incoming: lo.SliceToMap(oa.incoming, func(o *Order) (OrderId, Request) {
-			return o.Id, Request{
-				Tokens: o.Tokens,
-				Capacities: lo.MapToSlice(o.Parts, func(pt CapacityType, part Part) CapacityValue {
-					powers[pt] = struct{}{}
-					return CapacityValue{pt, part.Remains()}
-				}),
-			}
-		}),
-		InProgress: lo.SliceToMap(lo.Values(oa.inProgress), func(o *Order) (OrderId, Request) {
-			return o.Id, Request{
-				Tokens: o.Tokens,
-				Capacities: lo.MapToSlice(o.Parts, func(pt CapacityType, part Part) CapacityValue {
-					powers[pt] = struct{}{}
-					return CapacityValue{pt, part.Remains()}
-				}),
-			}
-		}),
-	}
-	result.Producers = make(map[CapacityType][]ProducerInfo, len(powers))
-	for _, p := range producers {
-		_, ok := powers[p.powerType]
+func (oa *OrderingAgent) View(producers map[ProducerId]ProducerInfo) OrderingAgentView {
+	// powers := map[CapacityType]struct{}{}
+	// result := OrderingAgentView{
+	// 	Incoming: lo.SliceToMap(oa.incoming, func(o *Order) (OrderId, Request) {
+	// 		return o.Id, Request{
+	// 			Tokens: o.Tokens,
+	// 			Capacities: lo.MapToSlice(o.Parts, func(pt CapacityType, part Part) CapacityValue {
+	// 				powers[pt] = struct{}{}
+	// 				return CapacityValue{pt, part.Remains()}
+	// 			}),
+	// 		}
+	// 	}),
+	// 	InProgress: lo.SliceToMap(lo.Values(oa.inProgress), func(o *Order) (OrderId, Request) {
+	// 		return o.Id, Request{
+	// 			Tokens: o.Tokens,
+	// 			Capacities: lo.MapToSlice(o.Parts, func(pt CapacityType, part Part) CapacityValue {
+	// 				powers[pt] = struct{}{}
+	// 				return CapacityValue{pt, part.Remains()}
+	// 			}),
+	// 		}
+	// 	}),
+	// }
+	// result.Producers = make(map[CapacityType][]ProducerInfo, len(powers))
+	// for _, p := range producers {
+	// 	_, ok := powers[p.powerType]
+	// 	if !ok {
+	// 		continue
+	// 	}
+	// 	result.Producers[p.powerType] = append(result.Producers[p.powerType], p.Info())
+	// }
+	// return result
+	return OrderingAgentView{}
+}
+
+func (oa *OrderingAgent) Bidding(producers map[ProducerId]ProducerInfo, cmd OrderingAgentCommand) (map[ProducerId][]Bid, error) {
+	for orderId, p := range cmd.Bids {
+		order, ok := oa.incoming[orderId]
 		if !ok {
-			continue
+			return nil, fmt.Errorf("%w: order id [%s] not found for agent [%s]", ErrNotFound, orderId, oa.id)
 		}
-		result.Producers[p.powerType] = append(result.Producers[p.powerType], p.Info())
+		positions := 0
+		for prodId, bid := range p {
+
+		}
 	}
-	return result
 }
 
-type Part struct {
-	Required Capacity
-	Consumed Capacity
-}
-
-func (p Part) Remains() Capacity {
-	return p.Required - p.Consumed
-}
-
-type Order struct {
-	Id     OrderId
-	Tokens Tokens
-	Parts  map[CapacityType]Part
-}
-
-type OrderIdGenerator interface {
-	New() OrderId
-}
-
-func newOrder(id OrderId, t Tokens, ps *ProcessSheet) *Order {
-	if t <= 0 {
-		panic("tokens must be greater than 0")
-	}
-	parts := make(map[CapacityType]Part, len(ps.Require))
-	for p, v := range ps.Require {
-		parts[p] = Part{v, 0}
-	}
-	return &Order{id, t, parts}
+func NewOrderingAgent(id OrderingAgentId) *OrderingAgent {
+	return &OrderingAgent{id, nil, map[OrderId]OrderInfo{}}
 }

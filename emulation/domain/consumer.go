@@ -2,13 +2,14 @@ package domain
 
 type ConsumerId string
 
-type ProductRequest struct {
-	Product Product
-	Tokens  Tokens
+type ConsumerRequest struct {
+	ConsumerId ConsumerId
+	Product    Product
+	Tokens     Tokens
 }
 
 type Consumer interface {
 	Id() ConsumerId
-	Order() []ProductRequest
+	Order() []ConsumerRequest
 	Emit(Tokens)
 }

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"math"
 	"slices"
 
@@ -12,18 +13,19 @@ type ProducerId string
 type DegradationRate uint
 
 type Restoration struct {
-	Require  ProcessSheet
+	Require  Product
 	Restores Capacity
 }
 
 type Upgrade struct {
-	Require   ProcessSheet
+	Require   Product
 	Increases Capacity
 }
 
-type Booking struct {
-	OrderId OrderId
-	Booked  Capacity
+type booking struct {
+	orderId OrderId
+	booked  Capacity
+	bid     Bid
 }
 
 type ProducerInfo struct {
@@ -43,9 +45,10 @@ type ProducingAgentConfig struct {
 }
 
 type Bid struct {
-	Capacity Capacity
-	Tokens   Tokens
-	OrderId  OrderId
+	CapacityType CapacityType
+	Capacity     Capacity
+	Tokens       Tokens
+	OrderId      OrderId
 }
 
 type CapacityUnitPrice float32
@@ -69,20 +72,23 @@ type producerState struct {
 	capacity          Capacity
 	maxCapacity       Capacity
 	bids              []Bid // replace with MaxHeap
-	inProgress        *Booking
+	inProgress        *booking
 	requestedCapacity Capacity
 	funds             Tokens
 	cutOffPrice       CapacityUnitPrice
 }
 
+type RestorationRunning bool
+type UpgradeRunning bool
+
 type consumerState struct {
-	requestedUpgrades uint
-	requestedRestores uint
+	upgradeRunning     UpgradeRunning
+	restorationRunning RestorationRunning
 }
 
 type ProducingAgent struct {
 	id            ProducerId
-	powerType     CapacityType
+	capacityType  CapacityType
 	degradation   DegradationRate
 	restoration   Restoration
 	upgrade       Upgrade
@@ -91,7 +97,7 @@ type ProducingAgent struct {
 }
 
 func (p *ProducingAgent) Info() ProducerInfo {
-	return ProducerInfo{p.id, p.powerType, p.producerState.capacity, p.producerState.cutOffPrice}
+	return ProducerInfo{p.id, p.capacityType, p.producerState.capacity, p.producerState.cutOffPrice}
 }
 
 func (p *ProducingAgent) capacityDegradation() Capacity {
@@ -99,73 +105,93 @@ func (p *ProducingAgent) capacityDegradation() Capacity {
 }
 
 func (p *ProducingAgent) View() ProducingAgentView {
-	return ProducingAgentView{p.id, p.producerState.capacity, p.producerState.requestedCapacity, p.capacityDegradation(), p.upgrade.Increases, p.producerState.funds}
+	return ProducingAgentView{p.id, p.producerState.maxCapacity, p.producerState.capacity, p.producerState.requestedCapacity, p.capacityDegradation(), p.upgrade.Increases, p.restoration.Restores, p.consumerState.upgradeRunning, p.consumerState.restorationRunning}
 }
 
 func (p *ProducingAgent) PlaceBids(bids []Bid) {
+	for i := range bids {
+		if bids[i].CapacityType != p.capacityType {
+			panic("wrong capacity type")
+		}
+	}
 	p.producerState.bids = append(p.producerState.bids, bids...)
 }
 
 type ProductionResult struct {
-	Completed []OrderId
-	Rejected  []OrderId
-}
-
-type Upgrades uint
-type Restores uint
-
-type UpgradeRequest struct {
-	SelfFunds Tokens
-	Loan      Tokens
-	Upgrade   Upgrade
-}
-
-type RestoreRequest struct {
-	SelfFunds   Tokens
-	Loan        Tokens
-	Restoration Restoration
+	Processing []Bid
+	Completed  []Bid
+	Rejected   []Bid
 }
 
 type ProducingAgentCommand struct {
-	Loan      Tokens
-	DoUpgrade bool
-	DoRestore bool
+	DoRestoration bool
+	DoUpgrade     bool
 }
 
-func (p *ProducingAgent) Invest(cmd ProducingAgentCommand) (*UpgradeRequest, *RestoreRequest) {
-	var upgrade *UpgradeRequest
-	var restore *RestoreRequest
-	loan := cmd.Loan
-	funds := p.producerState.funds
-	if cmd.DoUpgrade && cmd.DoRestore {
-		loan /= 2
-		funds /= 2
+type InvestmentType byte
+
+const (
+	InvestmentTypeUpgrade InvestmentType = iota
+	InvestmentTypeRestoration
+)
+
+type InvestmentRequest struct {
+	ProducerId  ProducerId
+	Type        InvestmentType
+	Product     Product
+	CutOffPrice CapacityUnitPrice
+}
+
+func (p *ProducingAgent) Invest(cmd ProducingAgentCommand) ([]InvestmentRequest, error) {
+	if bool(p.consumerState.upgradeRunning) && cmd.DoUpgrade {
+		return nil, errors.New("upgrade is running")
 	}
+	if bool(p.consumerState.restorationRunning) && cmd.DoRestoration {
+		return nil, errors.New("restorations is running")
+	}
+	requests := []InvestmentRequest{}
 	if cmd.DoUpgrade {
-		p.consumerState.requestedUpgrades++
-		upgrade = &UpgradeRequest{funds, loan, p.upgrade}
+		requests = append(requests, InvestmentRequest{p.id, InvestmentTypeUpgrade, p.upgrade.Require, p.producerState.cutOffPrice})
+		p.consumerState.upgradeRunning = true
 	}
-	if cmd.DoRestore {
-		p.consumerState.requestedRestores++
-		restore = &RestoreRequest{funds, loan, p.restoration}
+	if cmd.DoRestoration {
+		requests = append(requests, InvestmentRequest{p.id, InvestmentTypeRestoration, p.restoration.Require, p.producerState.cutOffPrice})
+		p.consumerState.restorationRunning = true
 	}
-	return upgrade, restore
+	return requests, nil
+}
+
+var ErrNoUpgradesRunning = errors.New("no updgrades running")
+var ErrNoRestorationRunning = errors.New("no restoration running")
+
+func (p *ProducingAgent) UpgradeRejected() {
+	if !p.consumerState.upgradeRunning {
+		panic(ErrNoUpgradesRunning)
+	}
+	p.consumerState.upgradeRunning = false
+}
+
+func (p *ProducingAgent) RestoreRejected() {
+	if !p.consumerState.restorationRunning {
+		panic(ErrNoRestorationRunning)
+	}
+	p.consumerState.restorationRunning = false
 }
 
 func (p *ProducingAgent) CompleteUpgrade() {
-	if p.consumerState.requestedUpgrades == 0 {
-		panic("no updgrades requested")
+	if !p.consumerState.upgradeRunning {
+		panic(ErrNoUpgradesRunning)
 	}
-	p.consumerState.requestedUpgrades--
+	p.consumerState.upgradeRunning = false
 	p.producerState.maxCapacity += p.upgrade.Increases
 	p.producerState.capacity += p.upgrade.Increases
 }
 
 func (p *ProducingAgent) CompleteRestore() {
-	if p.consumerState.requestedRestores == 0 {
-		panic("no restores requested")
+	if !p.consumerState.restorationRunning {
+		panic(ErrNoRestorationRunning)
 	}
-	p.consumerState.requestedRestores--
+	p.consumerState.restorationRunning = false
 	p.producerState.capacity = min(p.producerState.maxCapacity, p.producerState.capacity+p.restoration.Restores)
 }
 
@@ -181,18 +207,19 @@ func (p *ProducingAgent) Produce() ProductionResult {
 		return b.Capacity
 	})
 	remainingCapacity := int(p.producerState.capacity)
-	completed := []OrderId{}
-	rejected := []OrderId{}
+	completed := []Bid{}
+	rejected := []Bid{}
+	processing := []Bid{}
 	cutOffPrice := p.producerState.cutOffPrice
 	funds := Tokens(0)
 	inProgress := p.producerState.inProgress
 	if inProgress != nil {
-		remainingCapacity -= int(inProgress.Booked)
+		remainingCapacity -= int(inProgress.booked)
 		if remainingCapacity >= 0 {
-			completed = append(completed, inProgress.OrderId)
+			completed = append(completed, inProgress.bid)
 			inProgress = nil
 		} else {
-			inProgress = &Booking{inProgress.OrderId, inProgress.Booked - p.producerState.capacity}
+			inProgress = &booking{inProgress.orderId, inProgress.booked - p.producerState.capacity, inProgress.bid}
 		}
 	}
 	for i := range p.producerState.bids {
@@ -202,23 +229,29 @@ func (p *ProducingAgent) Produce() ProductionResult {
 			funds += bid.Tokens
 			remainingCapacity -= int(bid.Capacity)
 			if remainingCapacity >= 0 {
-				completed = append(completed, bid.OrderId)
+				completed = append(completed, bid)
 			} else {
-				inProgress = &Booking{bid.OrderId, Capacity(-remainingCapacity)}
+				inProgress = &booking{bid.OrderId, Capacity(-remainingCapacity), bid}
 			}
 			continue
 		}
-		rejected = append(rejected, p.producerState.bids[i].OrderId)
+		rejected = append(rejected, p.producerState.bids[i])
 	}
 	p.producerState = producerState{p.producerState.capacity, p.producerState.capacity, nil, inProgress, requestedCapacity, funds, cutOffPrice}
-	return ProductionResult{completed, rejected}
+	if inProgress != nil {
+		processing = append(processing, inProgress.bid)
+	}
+	return ProductionResult{processing, completed, rejected}
 }
 
 type ProducingAgentView struct {
-	Id                ProducerId
-	TotalCapacity     Capacity
-	RequestedCapacity Capacity
-	Degradation       Capacity
-	Upgrade           Capacity
-	Funds             Tokens
+	Id                 ProducerId
+	MaxCapacity        Capacity
+	Capacity           Capacity
+	RequestedCapacity  Capacity
+	Degradation        Capacity
+	Upgrade            Capacity
+	Restoration        Capacity
+	UpgradeRunning     UpgradeRunning
+	RestorationRunning RestorationRunning
 }
