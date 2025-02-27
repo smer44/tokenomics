@@ -91,3 +91,48 @@
 - Выбирает и берет в работу наиболее приоритетные ставки от АЗ (пока можно задать приоритет по количеству токенов на запрашиваемую единицу мощности)
 - Может работать над заказом несколько тактов подряд, в этом случае мощности доступные для новых заказов ограничены остатком мощности от уже выполняемого заказа
 - В случае принятия решения о необходимости инвестирования берет токены из инвестиционного пула токенов и формирует заказ
+
+# Эмулятор
+
+Эмулятор запускается в docker контейнере и предоставляет HTTP API для взаимодействия.
+
+[Контракт API в формате OpenAPI](/emulation/swagger.yaml)
+
+В диаграмме последовательности ниже имена операций соответвуют `operationId` в OpenAPI контракте
+
+```mermaid
+---
+title: Взаимодействие с эмулятором
+---
+sequenceDiagram
+  autonumber
+  participant env as Python Environment
+  participant e as Emulator
+
+  Note over env, e: Do configuration
+  env ->> e: resetSystem
+  env ->> e: listProducingAgents
+  e ->> env: ProducerAgentInfo[]
+  env ->> e: listOrderingAgents
+  e ->> env: OrderingAgentInfo[]
+
+  Note over env, e: Start emulation. Producing agents investement phase
+  loop Until emulation ends
+    loop For every producing agent
+      env ->> e: getProducingAgentView
+      e ->> env: {ProducerAgentView}
+      env ->> e: sendProducingAgentCommand
+    end
+    Note over env, e: When done for all producing agents
+    env ->> e: completeInvestment
+    Note over env, e: Ordering agents phase
+    loop For every ordering agent
+      env ->> e: getAgentsAgentView
+      e ->> env: {OrderingAgentView}
+      env ->> e: sendProducingAgentCommand
+    end
+    Note over env, e: When done for all ordering agents
+    env ->> e: completeCycle
+  end
+
+```
