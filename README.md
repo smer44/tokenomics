@@ -99,3 +99,48 @@
 Пример: Агент-производитель с мощность 12 единиц
 На этот продукт он в этом такте получил 10 нарядов на 20 единиц (каждый наряд на 2 единицы мощности), с токенами 5, 5, 4, 4, 3, 2, 1, 1, 1, 1
 Он взял самые приоритетные. Наряд с минимальной ценой взятый в работу стоит 2 токена, в результате цена отсечения составила `2 (стоимость наряда) / 2 (мощность по наряду) = 1` токен.
+
+# Эмулятор
+
+Эмулятор запускается в docker контейнере и предоставляет HTTP API для взаимодействия.
+
+[Контракт API в формате OpenAPI](/emulation/swagger.yaml)
+
+В диаграмме последовательности ниже имена операций соответвуют `operationId` в OpenAPI контракте
+
+```mermaid
+---
+title: Взаимодействие с эмулятором
+---
+sequenceDiagram
+  autonumber
+  participant env as Python Environment
+  participant e as Emulator
+
+  Note over env, e: Do configuration
+  env ->> e: resetSystem
+  env ->> e: listProducingAgents
+  e ->> env: ProducerAgentInfo[]
+  env ->> e: listOrderingAgents
+  e ->> env: OrderingAgentInfo[]
+
+  Note over env, e: Start emulation. Producing agents investement phase
+  loop Until emulation ends
+    loop For every producing agent
+      env ->> e: getProducingAgentView
+      e ->> env: {ProducerAgentView}
+      env ->> e: sendProducingAgentCommand
+    end
+    Note over env, e: When done for all producing agents
+    env ->> e: completeInvestment
+    Note over env, e: Ordering agents phase
+    loop For every ordering agent
+      env ->> e: getAgentsAgentView
+      e ->> env: {OrderingAgentView}
+      env ->> e: sendProducingAgentCommand
+    end
+    Note over env, e: When done for all ordering agents
+    env ->> e: completeCycle
+  end
+
+```
