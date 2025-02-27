@@ -28,7 +28,7 @@ func (t *TestConsumer) Id() ConsumerId {
 func (t *TestConsumer) Order() []ConsumerRequest {
 	i := t.idx
 	t.idx = (t.idx + 1) % len(t.products)
-	return []ConsumerRequest{{t.products[i], t.tokens}}
+	return []ConsumerRequest{{t.id, t.products[i], t.tokens}}
 }
 
 var _ Consumer = &TestConsumer{}
@@ -60,13 +60,12 @@ func TestSystem(t *testing.T) {
 		Then the product is produced in a single cycle`, func(t *testing.T) {
 		pac := ProducingAgentConfig{"p1", power1, 100, 0, Restoration{}, Upgrade{}}
 
-		system := NewSystem(&TestIdGenerator{}, 100, []ProcessSheet{processSheet1}, []ProducingAgentConfig{pac}, []Consumer{&consumer1})
+		system := NewSystem(&TestIdGenerator{}, 100, []ProcessSheet{processSheet1}, []ProducingAgentConfig{pac}, map[ConsumerId]Consumer{"c1": &consumer1})
 		// Investment
 		pav, err := system.ProducingAgentView("p1")
 		require.NoError(t, err)
 		require.Equal(t, ProducingAgentView{"p1", 100, 100, 0, 0, 0, 0, false, false}, pav)
 		system.ProducingAgentAction("p1", ProducingAgentCommand{})
-
 		// oav, err := system.OrderingAgentView("c1")
 		// require.NoError(t, err)
 		// require.Equal(t, OrderingAgentView{
@@ -77,12 +76,13 @@ func TestSystem(t *testing.T) {
 		// 	Producers:  map[CapacityType][]ProducerInfo{power1: {{"p1", power1, 100, 0}}},
 		// }, oav)
 		err = system.OrderingAgentAction("c1", OrderingAgentCommand{
-			Bids: map[OrderId]map[ProducerId]Tokens{
+			Orders: map[OrderId]map[ProducerId]Tokens{
 				"1": {"p1": 100},
 			}})
 		require.NoError(t, err)
-		scores := system.EndTurn()
-		require.Equal(t, TurnResult{0}, scores)
+		scores, err := system.EndCycle()
+		require.NoError(t, err)
+		require.Equal(t, CycleResult{0}, scores)
 		pav, err = system.ProducingAgentView("p1")
 		require.NoError(t, err)
 		require.Equal(t, ProducingAgentView{"p1", 100, 100, 10, 0, 0, 0, false, false}, pav)

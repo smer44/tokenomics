@@ -29,10 +29,10 @@ type booking struct {
 }
 
 type ProducerInfo struct {
-	Id          ProducerId
-	PowerType   CapacityType
-	Capacity    Capacity
-	CutOffPrice CapacityUnitPrice
+	Id           ProducerId
+	CapacityType CapacityType
+	Capacity     Capacity
+	CutOffPrice  CapacityUnitPrice
 }
 
 type ProducingAgentConfig struct {
@@ -164,35 +164,48 @@ func (p *ProducingAgent) Invest(cmd ProducingAgentCommand) ([]InvestmentRequest,
 var ErrNoUpgradesRunning = errors.New("no updgrades running")
 var ErrNoRestorationRunning = errors.New("no restoration running")
 
-func (p *ProducingAgent) UpgradeRejected() {
-	if !p.consumerState.upgradeRunning {
-		panic(ErrNoUpgradesRunning)
+func (p *ProducingAgent) InvesetmentCompleted(request *InvestmentRequest) {
+	if request.ProducerId != p.id {
+		panic(ErrNotFound)
 	}
-	p.consumerState.upgradeRunning = false
+	switch request.Type {
+	case InvestmentTypeRestoration:
+		if !p.consumerState.restorationRunning {
+			panic(ErrNoRestorationRunning)
+		}
+		p.consumerState.restorationRunning = false
+		p.producerState.capacity = min(p.producerState.maxCapacity, p.producerState.capacity+p.restoration.Restores)
+	case InvestmentTypeUpgrade:
+		if !p.consumerState.upgradeRunning {
+			panic(ErrNoUpgradesRunning)
+		}
+		p.consumerState.upgradeRunning = false
+		p.producerState.maxCapacity += p.upgrade.Increases
+		p.producerState.capacity += p.upgrade.Increases
+
+	default:
+		panic(errors.ErrUnsupported)
+	}
 }
 
-func (p *ProducingAgent) RestoreRejected() {
-	if !p.consumerState.restorationRunning {
-		panic(ErrNoRestorationRunning)
+func (p *ProducingAgent) InvesetmentRejected(request *InvestmentRequest) {
+	if request.ProducerId != p.id {
+		panic(ErrNotFound)
 	}
-	p.consumerState.restorationRunning = false
-}
-
-func (p *ProducingAgent) CompleteUpgrade() {
-	if !p.consumerState.upgradeRunning {
-		panic(ErrNoUpgradesRunning)
+	switch request.Type {
+	case InvestmentTypeRestoration:
+		if !p.consumerState.restorationRunning {
+			panic(ErrNoRestorationRunning)
+		}
+		p.consumerState.restorationRunning = false
+	case InvestmentTypeUpgrade:
+		if !p.consumerState.upgradeRunning {
+			panic(ErrNoUpgradesRunning)
+		}
+		p.consumerState.upgradeRunning = false
+	default:
+		panic(errors.ErrUnsupported)
 	}
-	p.consumerState.upgradeRunning = false
-	p.producerState.maxCapacity += p.upgrade.Increases
-	p.producerState.capacity += p.upgrade.Increases
-}
-
-func (p *ProducingAgent) CompleteRestore() {
-	if !p.consumerState.restorationRunning {
-		panic(ErrNoRestorationRunning)
-	}
-	p.consumerState.restorationRunning = false
-	p.producerState.capacity = min(p.producerState.maxCapacity, p.producerState.capacity+p.restoration.Restores)
 }
 
 func (p *ProducingAgent) Produce() ProductionResult {

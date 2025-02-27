@@ -1,15 +1,6 @@
 package domain
 
-type OrderStatus byte
-
-const (
-	OrderStatusFunding = iota
-	OrderStatusPlacing
-	OrderStatusInProgress
-	OrderStatusSuccess
-	OrderStatusFailed
-	OrderStatusPartiallyFailed
-)
+import "errors"
 
 type partStatus byte
 
@@ -20,58 +11,79 @@ const (
 	completed
 )
 
+type part struct {
+	capacity Capacity
+	status   partStatus
+}
+
 type Order struct {
-	status            OrderStatus
 	id                OrderId
 	tokens            Tokens
-	ps                ProcessSheet
-	parts             map[CapacityType]partStatus
+	parts             map[CapacityType]*part
 	consumerRequest   *ConsumerRequest
 	investmentRequest *InvestmentRequest
+	cycleCounter      uint
+	funded            bool
 }
+
+type Score uint
 
 type OrderIdGenerator interface {
 	New() OrderId
 }
 
-func newInvestmentOrder(id OrderId, ps ProcessSheet, request InvestmentRequest) *Order {
-	parts := make(map[CapacityType]partStatus, len(ps.Require))
-	for p := range ps.Require {
-		parts[p] = unknown
+func NewInvestmentOrder(id OrderId, ps ProcessSheet, request InvestmentRequest) *Order {
+	parts := make(map[CapacityType]*part, len(ps.Require))
+	for t, capacity := range ps.Require {
+		parts[t] = &part{capacity, unknown}
 	}
-	return &Order{OrderStatusFunding, id, 0, ps, parts, nil, &request}
+	return &Order{id, 0, parts, nil, &request, 0, false}
 }
 
-func newCustomerOrder(id OrderId, t Tokens, ps ProcessSheet, request ConsumerRequest) *Order {
-	if t <= 0 {
-		panic("tokens must be greater than 0")
+func NewConsumerOrder(id OrderId, ps ProcessSheet, request ConsumerRequest) *Order {
+	parts := make(map[CapacityType]*part, len(ps.Require))
+	for t, capacity := range ps.Require {
+		parts[t] = &part{capacity, unknown}
 	}
-	parts := make(map[CapacityType]partStatus, len(ps.Require))
-	for p := range ps.Require {
-		parts[p] = unknown
-	}
-	return &Order{OrderStatusPlacing, id, t, ps, parts, &request, nil}
+	return &Order{id, request.Tokens, parts, &request, nil, 0, true}
 }
 
 type OrderInfo struct {
-	Id           OrderId
-	Tokens       Tokens
-	ProcessSheet ProcessSheet
+	Id       OrderId
+	Tokens   Tokens
+	Required map[CapacityType]Capacity
+}
+
+var ErrFundingRequired = errors.New("funding required")
+
+func (o *Order) mustBeFunded() {
+	if o.RequiresFunding() {
+		panic(ErrFundingRequired)
+	}
 }
 
 func (o *Order) Info() OrderInfo {
-	return OrderInfo{o.id, o.tokens, o.ps}
+	o.mustBeFunded()
+	required := make(map[CapacityType]Capacity, len(o.parts))
+	for k, v := range o.parts {
+		if v.status == processing || v.status == completed {
+			continue
+		}
+		required[k] = v.capacity
+	}
+	return OrderInfo{o.id, o.tokens, required}
 }
 
 func (o *Order) AgentId() OrderingAgentId {
+	o.mustBeFunded()
 	if o.investmentRequest != nil {
 		return FromProducerId(o.investmentRequest.ProducerId)
 	}
 	return FromConsumerId(o.consumerRequest.ConsumerId)
 }
 
-func (o *Order) Status() OrderStatus {
-	return o.status
+func (o *Order) RequiresFunding() bool {
+	return !o.funded
 }
 
 func (o *Order) CutOffPrice() CapacityUnitPrice {
@@ -82,58 +94,116 @@ func (o *Order) CutOffPrice() CapacityUnitPrice {
 }
 
 func (o *Order) Fund(t Tokens) {
-	if o.status != OrderStatusFunding {
+	if !o.RequiresFunding() {
 		panic("not in funding status")
 	}
 	if o.investmentRequest == nil {
 		panic("not an investement order")
 	}
-	o.status = OrderStatusPlacing
 	o.tokens = t
+	o.funded = true
 }
 
-func (o *Order) getPartStatus(bid Bid) partStatus {
-	if bid.OrderId != o.id {
-		panic("wrong order id")
-	}
-	status, ok := o.parts[bid.CapacityType]
+func (o *Order) getPartStatus(ct CapacityType) partStatus {
+	part, ok := o.parts[ct]
 	if !ok {
 		panic(ErrNotFound)
 	}
-	return status
+	return part.status
 }
 
-func (o *Order) Processing(bid Bid) {
-	status := o.getPartStatus(bid)
+func (o *Order) spendTokens(t Tokens) {
+	if o.tokens < t {
+		panic("too few tokens left")
+	}
+	o.tokens -= t
+}
+
+func (o *Order) Processing(ct CapacityType, t Tokens) {
+	o.mustBeFunded()
+	status := o.getPartStatus(ct)
 	if status == processing {
 		return
 	}
 	if status == completed {
 		panic(ErrWrongState)
 	}
-	o.tokens -= bid.Tokens
-	o.parts[bid.CapacityType] = processing
+	o.spendTokens(t)
+	o.parts[ct].status = processing
 }
 
-func (o *Order) Completed(bid Bid) {
-	status := o.getPartStatus(bid)
+func (o *Order) Completed(ct CapacityType, t Tokens) {
+	o.mustBeFunded()
+	status := o.getPartStatus(ct)
 	if status == completed {
 		panic(ErrWrongState)
 	}
 	if status != processing {
-		o.tokens -= bid.Tokens
+		o.spendTokens(t)
 	}
-	o.parts[bid.CapacityType] = completed
+	o.parts[ct].status = completed
 }
 
-func (o *Order) Rejected(bid Bid) {
-	status := o.getPartStatus(bid)
+func (o *Order) Rejected(ct CapacityType) {
+	o.mustBeFunded()
+	status := o.getPartStatus(ct)
 	if status == processing || status == completed {
 		panic(ErrWrongState)
 	}
-	o.parts[bid.CapacityType] = rejected
+	o.parts[ct].status = rejected
 }
 
-func (o *Order) EndTurn() (Score, bool) {
+type OrderEvent any
+type ConsumerRequestCompleted struct {
+	Request *ConsumerRequest
+}
+type InvestmentRequestCompleted struct {
+	Request *InvestmentRequest
+}
+type ConsumerRequestRejected struct {
+	Remaining Tokens
+	Request   *ConsumerRequest
+}
+type InvestmentRequestRejected struct {
+	Request *InvestmentRequest
+}
+type OrderStillProcessing struct {
+}
 
+func (o *Order) EndCycle() (Score, OrderEvent) {
+	o.mustBeFunded()
+	rejectedCount := 0
+	completedCount := 0
+	for _, part := range o.parts {
+		switch part.status {
+		case rejected:
+			rejectedCount++
+		case completed:
+			completedCount++
+		}
+	}
+	// completed
+	if completedCount == len(o.parts) {
+		scores := Score(0)
+		if o.consumerRequest != nil {
+			return scores, ConsumerRequestCompleted{o.consumerRequest}
+		}
+		return scores, InvestmentRequestCompleted{o.investmentRequest}
+	}
+	if rejectedCount == len(o.parts) {
+		scores := Score(3)
+		if o.consumerRequest != nil {
+			return scores, ConsumerRequestRejected{o.tokens, o.consumerRequest}
+		}
+		return scores, InvestmentRequestRejected{o.investmentRequest}
+	}
+	if o.cycleCounter == 2 {
+		scores := Score(5)
+		if o.consumerRequest != nil {
+			return scores, ConsumerRequestRejected{o.tokens, o.consumerRequest}
+		}
+		return scores, InvestmentRequestRejected{o.investmentRequest}
+	}
+	o.cycleCounter++
+	return Score(1), OrderStillProcessing{}
 }

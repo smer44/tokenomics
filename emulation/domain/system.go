@@ -13,7 +13,7 @@ var ErrWrongState = errors.New("wrong state")
 type SystemState byte
 
 const (
-	SystemStateOrderPlacement = iota
+	SystemStateOrdersPlacement SystemState = iota
 	SystemStateOrdering
 )
 
@@ -29,20 +29,20 @@ func FromConsumerId(id ConsumerId) OrderingAgentId {
 type System struct {
 	state           SystemState
 	idGen           OrderIdGenerator
-	emission        Tokens
-	investmentFunds Tokens
+	cycleEmission   Tokens
+	investmentFund  Tokens
 	processSheets   map[Product]ProcessSheet
-	powerProviders  map[CapacityType][]ProducerId // single procuder for each type at the moment
-	producers       map[ProducerId]*ProducingAgent
+	producerLookup  map[CapacityType][]ProducerId
+	producingAgents map[ProducerId]*ProducingAgent
 	producerInfos   map[ProducerId]ProducerInfo
 	orderingAgents  map[OrderingAgentId]*OrderingAgent
 	orders          map[OrderId]*Order
-	consumers       []Consumer
+	consumers       map[ConsumerId]Consumer
 }
 
-func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []ProducingAgentConfig, consumers []Consumer) *System {
+func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []ProducingAgentConfig, consumers map[ConsumerId]Consumer) *System {
 	s := &System{
-		SystemStateOrderPlacement,
+		SystemStateOrdersPlacement,
 		idGen,
 		emission,
 		0,
@@ -60,46 +60,19 @@ func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []
 		map[OrderId]*Order{},
 		consumers,
 	}
-	s.producerInfos = lo.MapEntries(s.producers, func(id ProducerId, ps *ProducingAgent) (ProducerId, ProducerInfo) {
+	s.producerInfos = lo.MapEntries(s.producingAgents, func(id ProducerId, ps *ProducingAgent) (ProducerId, ProducerInfo) {
 		return id, ps.Info()
 	})
 	for _, c := range consumers {
 		id := FromConsumerId(c.Id())
 		s.orderingAgents[id] = NewOrderingAgent(id)
 	}
-	for prodId := range s.producers {
+	for prodId := range s.producingAgents {
 		id := FromProducerId(prodId)
 		s.orderingAgents[id] = NewOrderingAgent(id)
 	}
-	s.startTurn()
-
+	s.startCycle()
 	return s
-}
-
-func (s *System) emit() {
-	s.investmentFunds = s.emission / 2
-	consumerTokens := s.emission / 2 / Tokens(len(s.orderingAgents))
-	for _, c := range s.consumers {
-		c.Emit(consumerTokens)
-	}
-}
-
-func (s *System) getProcessSheet(id Product) ProcessSheet {
-	ps, ok := s.processSheets[id]
-	if !ok {
-		panic(fmt.Sprintf("no process sheet for [%d]", id))
-	}
-	return ps
-}
-
-func (s *System) placeComsumersOrders() {
-	for _, c := range s.consumers {
-		for _, request := range c.Order() {
-			id := s.idGen.New()
-			order := newCustomerOrder(id, request.Tokens, s.getProcessSheet(request.Product), request)
-			s.orders[id] = order
-		}
-	}
 }
 
 func (s *System) OrderingAgentView(id OrderingAgentId) (OrderingAgentView, error) {
@@ -121,12 +94,12 @@ func (s *System) OrderingAgentAction(id OrderingAgentId, cmd OrderingAgentComman
 	if !ok {
 		return ErrNotFound
 	}
-	bids, err := agent.Bidding(s.producerInfos, cmd)
+	bids, err := agent.Bidding(cmd, s.producerInfos)
 	if err != nil {
 		return err
 	}
 	for prodId, bids := range bids {
-		p, ok := s.producers[prodId]
+		p, ok := s.producingAgents[prodId]
 		if !ok {
 			return ErrNotFound
 		}
@@ -136,10 +109,10 @@ func (s *System) OrderingAgentAction(id OrderingAgentId, cmd OrderingAgentComman
 }
 
 func (s *System) ProducingAgentView(id ProducerId) (ProducingAgentView, error) {
-	if s.state != SystemStateOrderPlacement {
+	if s.state != SystemStateOrdersPlacement {
 		return ProducingAgentView{}, ErrWrongState
 	}
-	p, ok := s.producers[id]
+	p, ok := s.producingAgents[id]
 	if !ok {
 		return ProducingAgentView{}, ErrNotFound
 	}
@@ -147,10 +120,10 @@ func (s *System) ProducingAgentView(id ProducerId) (ProducingAgentView, error) {
 }
 
 func (s *System) ProducingAgentAction(id ProducerId, cmd ProducingAgentCommand) error {
-	if s.state != SystemStateOrderPlacement {
+	if s.state != SystemStateOrdersPlacement {
 		return ErrWrongState
 	}
-	p, ok := s.producers[id]
+	p, ok := s.producingAgents[id]
 	if !ok {
 		return ErrNotFound
 	}
@@ -160,75 +133,106 @@ func (s *System) ProducingAgentAction(id ProducerId, cmd ProducingAgentCommand) 
 	}
 	for _, r := range investmentRequests {
 		id := s.idGen.New()
-		s.orders[id] = newInvestmentOrder(id, s.getProcessSheet(r.Product), r)
+		s.orders[id] = NewInvestmentOrder(id, MustGet(s.processSheets, r.Product), r)
 	}
 	return nil
 }
 
-func (s *System) startTurn() {
-	s.state = SystemStateOrderPlacement
+func (s *System) placeComsumersOrders() {
+	for _, c := range s.consumers {
+		for _, request := range c.Order() {
+			id := s.idGen.New()
+			order := NewConsumerOrder(id, MustGet(s.processSheets, request.Product), request)
+			s.orders[id] = order
+		}
+	}
+}
+
+func (s *System) emit() {
+	s.investmentFund = s.cycleEmission / 2
+	consumerTokens := s.cycleEmission / 2 / Tokens(len(s.consumers))
+	for _, c := range s.consumers {
+		c.Emit(consumerTokens)
+	}
+}
+
+func (s *System) startCycle() {
+	s.state = SystemStateOrdersPlacement
 	s.emit()
 	s.placeComsumersOrders()
 }
 
-type Score uint
-
-type TurnResult struct {
-	Score Score
-}
-
 func (s *System) StartOrdering() error {
-	if s.state != SystemStateOrderPlacement {
+	if s.state != SystemStateOrdersPlacement {
 		return ErrWrongState
 	}
 	// Make funding
 	// Distibute investment fund accodingly producer's cut off price  (capacity deficit)
 	totalCutOffSum := CapacityUnitPrice(0)
-	funding := map[OrderId]*Order{}
+	requireFunding := map[OrderId]*Order{}
 	for orderId, order := range s.orders {
-		if order.Status() != OrderStatusFunding {
+		if !order.RequiresFunding() {
 			continue
 		}
-		funding[orderId] = order
+		requireFunding[orderId] = order
 		totalCutOffSum += order.CutOffPrice()
 	}
-	for _, order := range funding {
-		funds := Tokens(float32(order.CutOffPrice()) * float32(s.investmentFunds) / float32(totalCutOffSum))
+	for _, order := range requireFunding {
+		funds := Tokens(float32(order.CutOffPrice()) * float32(s.investmentFund) / float32(totalCutOffSum))
 		order.Fund(funds)
 	}
-	s.investmentFunds = 0
 	// Place orders
 	for _, order := range s.orders {
-		if order.Status() != OrderStatusPlacing {
-			continue
-		}
-		id := order.AgentId()
-		agent, ok := s.orderingAgents[id]
-		if !ok {
-			panic(fmt.Sprintf("no ordering agent with id [%s]", id))
-		}
-		agent.PlaceOrder(order.Info())
+		MustGet(s.orderingAgents, order.AgentId()).PlaceOrder(order.Info())
 	}
 	s.state = SystemStateOrdering
 	return nil
 }
 
-func (s *System) EndTurn() (TurnResult, error) {
+type CycleResult struct {
+	Score Score
+}
+
+func (s *System) EndCycle() (CycleResult, error) {
 	if s.state != SystemStateOrdering {
-		return TurnResult{}, ErrWrongState
+		return CycleResult{}, ErrWrongState
 	}
-	for _, p := range s.producers {
+	for _, p := range s.producingAgents {
 		result := p.Produce()
 		for _, bid := range result.Processing {
-			ord, ok := s.orders[bid.OrderId]
-			if !ok {
-				panic(ErrNotFound)
-			}
-			ord.Processing(bid)
+			MustGet(s.orders, bid.OrderId).Processing(bid.CapacityType, bid.Tokens)
+		}
+		for _, bid := range result.Completed {
+			MustGet(s.orders, bid.OrderId).Completed(bid.CapacityType, bid.Tokens)
+		}
+		for _, bid := range result.Rejected {
+			MustGet(s.orders, bid.OrderId).Rejected(bid.CapacityType)
 		}
 	}
-	s.startTurn()
-	return TurnResult{}, nil
+	cycleScore := Score(0)
+	for id, order := range s.orders {
+		score, event := order.EndCycle()
+		cycleScore += score
+		completed := true
+		switch e := event.(type) {
+		case ConsumerRequestCompleted:
+		case InvestmentRequestCompleted:
+			s.producingAgents[e.Request.ProducerId].InvesetmentCompleted(e.Request)
+		case ConsumerRequestRejected:
+			s.consumers[e.Request.ConsumerId].Emit(e.Remaining)
+		case InvestmentRequestRejected:
+			s.producingAgents[e.Request.ProducerId].InvesetmentRejected(e.Request)
+		case OrderStillProcessing:
+			completed = false
+		default:
+			panic(errors.ErrUnsupported)
+		}
+		if completed {
+			delete(s.orders, id)
+		}
+	}
+	s.startCycle()
+	return CycleResult{cycleScore}, nil
 }
 
 type ProcessSheet struct {
