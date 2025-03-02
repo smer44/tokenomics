@@ -20,10 +20,10 @@ const (
 type OrderingAgentId string
 
 func FromProducerId(id ProducerId) OrderingAgentId {
-	return OrderingAgentId(fmt.Sprintf("p%s", id))
+	return OrderingAgentId(string(id))
 }
 func FromConsumerId(id ConsumerId) OrderingAgentId {
-	return OrderingAgentId(fmt.Sprintf("c%s", id))
+	return OrderingAgentId(string(id))
 }
 
 type System struct {
@@ -94,7 +94,7 @@ func (s *System) OrderingAgentAction(id OrderingAgentId, cmd OrderingAgentComman
 	if !ok {
 		return ErrNotFound
 	}
-	bids, err := agent.Bidding(cmd, s.producerInfos)
+	bids, err := agent.HandleCmd(cmd, s.producerInfos)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (s *System) ProducingAgentAction(id ProducerId, cmd ProducingAgentCommand) 
 	if !ok {
 		return ErrNotFound
 	}
-	investmentRequests, err := p.Invest(cmd)
+	investmentRequests, err := p.HandleCmd(cmd)
 	if err != nil {
 		return err
 	}
@@ -150,6 +150,9 @@ func (s *System) placeComsumersOrders() {
 
 func (s *System) emit() {
 	s.investmentFund = s.cycleEmission / 2
+	if len(s.consumers) == 0 {
+		return
+	}
 	consumerTokens := s.cycleEmission / 2 / Tokens(len(s.consumers))
 	for _, c := range s.consumers {
 		c.Emit(consumerTokens)
@@ -162,25 +165,49 @@ func (s *System) startCycle() {
 	s.placeComsumersOrders()
 }
 
+func distibuteInvestmentFund(orders map[OrderId]*Order, investmentFund Tokens) {
+	// Make funding
+	// Distibute investment fund accodingly producer's cut off price  (capacity deficit)
+	totalCutOffSum := CapacityUnitPrice(0)
+	nanCount := 0
+	for _, order := range orders {
+		if !order.RequiresFunding() {
+			continue
+		}
+		if !order.CutOffPrice().IsNaN() {
+			totalCutOffSum += order.CutOffPrice()
+		} else {
+			nanCount++
+		}
+	}
+	remains := investmentFund
+	for _, order := range orders {
+		if !order.RequiresFunding() || order.CutOffPrice().IsNaN() {
+			continue
+		}
+		funds := Tokens(float32(order.CutOffPrice()) * float32(investmentFund) / float32(totalCutOffSum))
+		order.Fund(funds)
+		remains -= funds
+	}
+	if nanCount == 0 {
+		return
+	}
+	funds := remains / Tokens(nanCount)
+	for _, order := range orders {
+		if !order.RequiresFunding() {
+			continue
+		}
+		order.Fund(funds)
+		remains -= funds
+	}
+}
+
 func (s *System) StartOrdering() error {
 	if s.state != SystemStateOrdersPlacement {
 		return ErrWrongState
 	}
-	// Make funding
-	// Distibute investment fund accodingly producer's cut off price  (capacity deficit)
-	totalCutOffSum := CapacityUnitPrice(0)
-	requireFunding := map[OrderId]*Order{}
-	for orderId, order := range s.orders {
-		if !order.RequiresFunding() {
-			continue
-		}
-		requireFunding[orderId] = order
-		totalCutOffSum += order.CutOffPrice()
-	}
-	for _, order := range requireFunding {
-		funds := Tokens(float32(order.CutOffPrice()) * float32(s.investmentFund) / float32(totalCutOffSum))
-		order.Fund(funds)
-	}
+	fmt.Printf("%#v\n", s.orders)
+	distibuteInvestmentFund(s.orders, s.investmentFund)
 	// Place orders
 	for _, order := range s.orders {
 		MustGet(s.orderingAgents, order.AgentId()).PlaceOrder(order.Info())
@@ -193,9 +220,12 @@ type CycleResult struct {
 	Score Score
 }
 
-func (s *System) EndCycle() (CycleResult, error) {
+func (s *System) CompleteCycle() (CycleResult, error) {
 	if s.state != SystemStateOrdering {
 		return CycleResult{}, ErrWrongState
+	}
+	for _, oa := range s.orderingAgents {
+		oa.CompleteCycle()
 	}
 	for _, p := range s.producingAgents {
 		result := p.Produce()
@@ -211,7 +241,7 @@ func (s *System) EndCycle() (CycleResult, error) {
 	}
 	cycleScore := Score(0)
 	for id, order := range s.orders {
-		score, event := order.EndCycle()
+		score, event := order.CompleteCycle()
 		cycleScore += score
 		completed := true
 		switch e := event.(type) {

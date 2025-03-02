@@ -18,31 +18,31 @@ import (
 type ProducingAgentView struct {
 
 	// Current capacity. Degradates each turn. Could be increased to MaxCapacity with Restoration purchase
-	Capacity int64 `json:"Capacity,omitempty"`
+	Capacity int64 `json:"capacity,omitempty"`
 
 	// Capacity decrease in the current cycle
-	Degradation int64 `json:"Degradation,omitempty"`
+	Degradation int64 `json:"degradation,omitempty"`
 
 	// Agent ID
-	ID string `json:"Id,omitempty"`
+	ID string `json:"id,omitempty"`
 
 	// Maximum capacity. Can be increased with Upgrade purchase
-	MaxCapacity int64 `json:"MaxCapacity,omitempty"`
+	MaxCapacity int64 `json:"maxCapacity,omitempty"`
 
 	// Total capacity was requested in the previous cycle
-	RequestedCapacity int64 `json:"RequestedCapacity,omitempty"`
+	RequestedCapacity int64 `json:"requestedCapacity,omitempty"`
 
 	// Capacity gain with Restoration
-	Restoration int64 `json:"Restoration,omitempty"`
+	Restoration int64 `json:"restoration,omitempty"`
 
 	// Indicates Restoration production is running
-	RestorationRunning bool `json:"RestorationRunning,omitempty"`
+	RestorationRunning bool `json:"restorationRunning,omitempty"`
 
 	// MaxCapacity and Capacity gain with Upgrade
-	Upgrade int64 `json:"Upgrade,omitempty"`
+	Upgrade int64 `json:"upgrade,omitempty"`
 
 	// Indicates Upgrade production is running
-	UpgradeRunning bool `json:"UpgradeRunning,omitempty"`
+	UpgradeRunning bool `json:"upgradeRunning,omitempty"`
 }
 
 // Validate validates this producing agent view

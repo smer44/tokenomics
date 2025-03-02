@@ -18,10 +18,10 @@ import (
 type ProducingAgentCommand struct {
 
 	// Pass true for purchasing of Restoration (Not allowed if Restoration is producing)
-	DoRestoration bool `json:"DoRestoration,omitempty"`
+	DoRestoration bool `json:"doRestoration,omitempty"`
 
 	// Pass true for purchasing of Upgrade (Not allowed if Upgrade is producing)
-	DoUpgrade bool `json:"DoUpgrade,omitempty"`
+	DoUpgrade bool `json:"doUpgrade,omitempty"`
 }
 
 // Validate validates this producing agent command

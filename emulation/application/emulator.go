@@ -1,0 +1,84 @@
+package application
+
+import (
+	"emulation/domain"
+	"strconv"
+	"sync"
+)
+
+type sequentialGenerator uint64
+
+func (s *sequentialGenerator) New() domain.OrderId {
+	id := domain.OrderId(strconv.Itoa(int(*s)))
+	(*s)++
+	return id
+}
+
+type Emulator struct {
+	idGen  sequentialGenerator
+	rwMu   *sync.RWMutex
+	system *domain.System
+}
+
+func NewEmulator() *Emulator {
+	e := &Emulator{0, &sync.RWMutex{}, nil}
+	e.Reset()
+	return e
+}
+
+func (e *Emulator) Reset() {
+	cpt1 := domain.CapacityType(1)
+	cpt2 := domain.CapacityType(2)
+	consumerProduct := domain.Product(1)
+	investmentProduct := domain.Product(2)
+	sheets := []domain.ProcessSheet{
+		{consumerProduct, map[domain.CapacityType]domain.Capacity{
+			cpt1: 10,
+		}},
+		{investmentProduct, map[domain.CapacityType]domain.Capacity{
+			cpt2: 200,
+		}},
+	}
+	pac1 := domain.ProducingAgentConfig{"p1", cpt1, 100, 1, domain.Restoration{}, domain.Upgrade{investmentProduct, 50}}
+	pac2 := domain.ProducingAgentConfig{"p2", cpt2, 110, 1, domain.Restoration{}, domain.Upgrade{}}
+	producerConfigs := []domain.ProducingAgentConfig{pac1, pac2}
+	e.rwMu.Lock()
+	defer e.rwMu.Unlock()
+	e.system = domain.NewSystem(&e.idGen, 1000, sheets, producerConfigs, map[domain.ConsumerId]domain.Consumer{})
+}
+
+func (e *Emulator) GetOrderingAgentView(id domain.OrderingAgentId) (domain.OrderingAgentView, error) {
+	e.rwMu.RLock()
+	defer e.rwMu.RUnlock()
+	return e.system.OrderingAgentView(id)
+}
+
+func (e *Emulator) GetProducingAgentView(id domain.ProducerId) (domain.ProducingAgentView, error) {
+	e.rwMu.RLock()
+	defer e.rwMu.RUnlock()
+	return e.system.ProducingAgentView(id)
+}
+
+func (e *Emulator) OrderingAgentAction(id domain.OrderingAgentId, cmd domain.OrderingAgentCommand) error {
+	e.rwMu.Lock()
+	defer e.rwMu.Unlock()
+	return e.system.OrderingAgentAction(id, cmd)
+}
+
+func (e *Emulator) ProducingAgentAction(id domain.ProducerId, cmd domain.ProducingAgentCommand) error {
+	e.rwMu.Lock()
+	defer e.rwMu.Unlock()
+	return e.system.ProducingAgentAction(id, cmd)
+}
+
+func (e *Emulator) StartOrdering() error {
+	e.rwMu.Lock()
+	defer e.rwMu.Unlock()
+	return e.system.StartOrdering()
+}
+
+func (e *Emulator) CompleteCycle() (domain.CycleResult, error) {
+	e.rwMu.Lock()
+	defer e.rwMu.Unlock()
+	return e.system.CompleteCycle()
+}

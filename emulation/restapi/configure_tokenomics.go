@@ -9,7 +9,11 @@ import (
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
+	"github.com/samber/lo"
 
+	"emulation/application"
+	"emulation/domain"
+	"emulation/models"
 	"emulation/restapi/operations"
 	"emulation/restapi/operations/tokenomics"
 )
@@ -38,24 +42,62 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 
 	api.JSONProducer = runtime.JSONProducer()
 
-	if api.GetOrderingAgentsIDHandler == nil {
-		api.GetOrderingAgentsIDHandler = operations.GetOrderingAgentsIDHandlerFunc(func(params operations.GetOrderingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.GetOrderingAgentsID has not yet been implemented")
+	emulator := application.NewEmulator()
+
+	if api.TokenomicsCompleteCycleHandler == nil {
+		api.TokenomicsCompleteCycleHandler = tokenomics.CompleteCycleHandlerFunc(func(params tokenomics.CompleteCycleParams) middleware.Responder {
+			result, err := emulator.CompleteCycle()
+			if err != nil {
+				return middleware.Error(http.StatusBadRequest, err.Error())
+			}
+			return tokenomics.NewCompleteCycleOK().WithPayload(&models.CycleResult{
+				lo.ToPtr(int64(result.Score)),
+			})
 		})
 	}
-	if api.GetProducingAgentsIDHandler == nil {
-		api.GetProducingAgentsIDHandler = operations.GetProducingAgentsIDHandlerFunc(func(params operations.GetProducingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.GetProducingAgentsID has not yet been implemented")
+	if api.GetOrderingAgentViewHandler == nil {
+		api.GetOrderingAgentViewHandler = operations.GetOrderingAgentViewHandlerFunc(func(params operations.GetOrderingAgentViewParams) middleware.Responder {
+			result, err := emulator.GetOrderingAgentView(domain.OrderingAgentId(params.ID))
+			if err != nil {
+				return middleware.Error(http.StatusBadRequest, err.Error())
+			}
+			return operations.NewGetOrderingAgentViewOK().WithPayload(&models.OrderingAgentView{
+				lo.MapEntries(result.Incoming, func(oid domain.OrderId, val map[domain.CapacityType]domain.Capacity) (string, map[string]int64) {
+					return string(oid), lo.MapEntries(val, func(ct domain.CapacityType, cap domain.Capacity) (string, int64) {
+						return string(ct), int64(cap)
+					})
+				}),
+				lo.MapEntries(result.Producers, func(oid domain.CapacityType, val map[domain.ProducerId]domain.ProducerInfo) (string, map[string]models.ProducingAgentInfo) {
+					return string(oid), lo.MapEntries(val, func(pId domain.ProducerId, pInfo domain.ProducerInfo) (string, models.ProducingAgentInfo) {
+						return string(pId), models.ProducingAgentInfo{
+							int64(pInfo.Capacity),
+							string(pInfo.CapacityType),
+							int64(pInfo.CutOffPrice),
+							string(pInfo.Id),
+							int64(pInfo.MaxCapacity),
+						}
+					})
+				}),
+			})
 		})
 	}
-	if api.PostOrderingAgentsIDHandler == nil {
-		api.PostOrderingAgentsIDHandler = operations.PostOrderingAgentsIDHandlerFunc(func(params operations.PostOrderingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.PostOrderingAgentsID has not yet been implemented")
-		})
-	}
-	if api.PostProducingAgentsIDHandler == nil {
-		api.PostProducingAgentsIDHandler = operations.PostProducingAgentsIDHandlerFunc(func(params operations.PostProducingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.PostProducingAgentsID has not yet been implemented")
+	if api.GetProducingAgentViewHandler == nil {
+		api.GetProducingAgentViewHandler = operations.GetProducingAgentViewHandlerFunc(func(params operations.GetProducingAgentViewParams) middleware.Responder {
+			result, err := emulator.GetProducingAgentView(domain.ProducerId(params.ID))
+			if err != nil {
+				return middleware.Error(http.StatusBadRequest, err.Error())
+			}
+			return operations.NewGetProducingAgentViewOK().WithPayload(&models.ProducingAgentView{
+				Capacity:           int64(result.Capacity),
+				Degradation:        int64(result.Degradation),
+				ID:                 string(result.Id),
+				MaxCapacity:        int64(result.MaxCapacity),
+				RequestedCapacity:  int64(result.RequestedCapacity),
+				Upgrade:            int64(result.Upgrade),
+				Restoration:        int64(result.Restoration),
+				UpgradeRunning:     bool(result.UpgradeRunning),
+				RestorationRunning: bool(result.RestorationRunning),
+			})
 		})
 	}
 	if api.GetSystemInfoHandler == nil {
@@ -63,14 +105,55 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 			return middleware.NotImplemented("operation operations.GetSystemInfo has not yet been implemented")
 		})
 	}
-	if api.ListProducersHandler == nil {
-		api.ListProducersHandler = operations.ListProducersHandlerFunc(func(params operations.ListProducersParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.ListProducers has not yet been implemented")
+	if api.ListOrderingAgentsHandler == nil {
+		api.ListOrderingAgentsHandler = operations.ListOrderingAgentsHandlerFunc(func(params operations.ListOrderingAgentsParams) middleware.Responder {
+			return middleware.NotImplemented("operation operations.ListOrderingAgents has not yet been implemented")
+		})
+	}
+	if api.ListProducingAgentsHandler == nil {
+		api.ListProducingAgentsHandler = operations.ListProducingAgentsHandlerFunc(func(params operations.ListProducingAgentsParams) middleware.Responder {
+			return middleware.NotImplemented("operation operations.ListProducingAgents has not yet been implemented")
 		})
 	}
 	if api.TokenomicsResetSystemHandler == nil {
 		api.TokenomicsResetSystemHandler = tokenomics.ResetSystemHandlerFunc(func(params tokenomics.ResetSystemParams) middleware.Responder {
 			return middleware.NotImplemented("operation tokenomics.ResetSystem has not yet been implemented")
+		})
+	}
+	if api.SendOrderingAgentCommandHandler == nil {
+		api.SendOrderingAgentCommandHandler = operations.SendOrderingAgentCommandHandlerFunc(func(params operations.SendOrderingAgentCommandParams) middleware.Responder {
+			err := emulator.OrderingAgentAction(domain.OrderingAgentId(params.ID), domain.OrderingAgentCommand{
+				Orders: lo.MapEntries(params.Body.Orders, func(orderId string, producers map[string]int64) (domain.OrderId, map[domain.ProducerId]domain.Tokens) {
+					return domain.OrderId(orderId), lo.MapEntries(producers, func(producerId string, tokens int64) (domain.ProducerId, domain.Tokens) {
+						return domain.ProducerId(producerId), domain.Tokens(tokens)
+					})
+				}),
+			})
+			if err != nil {
+				return middleware.Error(http.StatusBadRequest, err.Error())
+			}
+			return operations.NewSendOrderingAgentCommandOK()
+		})
+	}
+	if api.SendProducingAgentCommandHandler == nil {
+		api.SendProducingAgentCommandHandler = operations.SendProducingAgentCommandHandlerFunc(func(params operations.SendProducingAgentCommandParams) middleware.Responder {
+			err := emulator.ProducingAgentAction(domain.ProducerId(params.ID), domain.ProducingAgentCommand{
+				DoRestoration: params.Body.DoRestoration,
+				DoUpgrade:     params.Body.DoUpgrade,
+			})
+			if err != nil {
+				return middleware.Error(http.StatusBadRequest, err.Error())
+			}
+			return operations.NewSendProducingAgentCommandOK()
+		})
+	}
+	if api.TokenomicsStartOrderingHandler == nil {
+		api.TokenomicsStartOrderingHandler = tokenomics.StartOrderingHandlerFunc(func(params tokenomics.StartOrderingParams) middleware.Responder {
+			err := emulator.StartOrdering()
+			if err != nil {
+				return middleware.Error(http.StatusBadRequest, err.Error())
+			}
+			return tokenomics.NewStartOrderingOK()
 		})
 	}
 

@@ -21,10 +21,10 @@ import (
 type OrderingAgentView struct {
 
 	// incoming
-	Incoming map[string]map[string]int64 `json:"Incoming,omitempty"`
+	Incoming map[string]map[string]int64 `json:"incoming,omitempty"`
 
 	// producers
-	Producers map[string]map[string]ProducerInfo `json:"Producers,omitempty"`
+	Producers map[string]map[string]ProducingAgentInfo `json:"producers,omitempty"`
 }
 
 // Validate validates this ordering agent view
@@ -50,15 +50,15 @@ func (m *OrderingAgentView) validateProducers(formats strfmt.Registry) error {
 
 		for kk := range m.Producers[k] {
 
-			if err := validate.Required("Producers"+"."+k+"."+kk, "body", m.Producers[k][kk]); err != nil {
+			if err := validate.Required("producers"+"."+k+"."+kk, "body", m.Producers[k][kk]); err != nil {
 				return err
 			}
 			if val, ok := m.Producers[k][kk]; ok {
 				if err := val.Validate(formats); err != nil {
 					if ve, ok := err.(*errors.Validation); ok {
-						return ve.ValidateName("Producers" + "." + k + "." + kk)
+						return ve.ValidateName("producers" + "." + k + "." + kk)
 					} else if ce, ok := err.(*errors.CompositeError); ok {
-						return ce.ValidateName("Producers" + "." + k + "." + kk)
+						return ce.ValidateName("producers" + "." + k + "." + kk)
 					}
 					return err
 				}

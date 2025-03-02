@@ -1,6 +1,8 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+)
 
 type partStatus byte
 
@@ -52,6 +54,10 @@ type OrderInfo struct {
 	Id       OrderId
 	Tokens   Tokens
 	Required map[CapacityType]Capacity
+}
+
+func (i OrderInfo) Fulfilled() bool {
+	return len(i.Required) == 0
 }
 
 var ErrFundingRequired = errors.New("funding required")
@@ -170,7 +176,7 @@ type InvestmentRequestRejected struct {
 type OrderStillProcessing struct {
 }
 
-func (o *Order) EndCycle() (Score, OrderEvent) {
+func (o *Order) CompleteCycle() (Score, OrderEvent) {
 	o.mustBeFunded()
 	rejectedCount := 0
 	completedCount := 0

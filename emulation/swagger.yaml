@@ -31,9 +31,9 @@ paths:
       responses:
         200:
           description: OK
-  /system/complete-investment:
+  /system/start-ordering:
     post:
-      operationId: completeInvestment
+      operationId: startOrdering
       summary: Complete investment phase
       tags:
         - Tokenomics
@@ -49,6 +49,8 @@ paths:
       responses:
         200:
           description: OK
+          schema:
+            $ref: "#/definitions/CycleResult"
 
   /producer-agents:
     get:
@@ -154,13 +156,13 @@ definitions:
             restorationRunning: "false"
     type: "object"
     properties:
-      Incoming:
+      incoming:
         type: "object"
         additionalProperties:
           type: "object"
           additionalProperties:
             type: "integer"
-      Producers:
+      producers:
         type: "object"
         additionalProperties:
           type: "object"
@@ -179,7 +181,7 @@ definitions:
     description: Ordering agent command
     type: "object"
     properties:
-      Orders:
+      orders:
         type: "object"
         additionalProperties:
           type: "object"
@@ -189,77 +191,85 @@ definitions:
   ProducingAgentView:
     type: "object"
     properties:
-      Id:
+      id:
         description: Agent ID
         type: "string"
-      MaxCapacity:
+      maxCapacity:
         description: Maximum capacity. Can be increased with Upgrade purchase
         type: "integer"
-      Capacity:
+      capacity:
         description: Current capacity. Degradates each turn. Could be increased to MaxCapacity with Restoration purchase
         type: "integer"
-      RequestedCapacity:
+      requestedCapacity:
         description: Total capacity was requested in the previous cycle
         type: "integer"
-      Degradation:
+      degradation:
         description: Capacity decrease in the current cycle
         type: "integer"
-      Upgrade:
+      upgrade:
         description: MaxCapacity and Capacity gain with Upgrade
         type: "integer"
-      Restoration:
+      restoration:
         description: Capacity gain with Restoration
         type: "integer"
-      UpgradeRunning:
+      upgradeRunning:
         description: Indicates Upgrade production is running
         type: "boolean"
-      RestorationRunning:
+      restorationRunning:
         description: Indicates Restoration production is running
         type: "boolean"
 
   ProducingAgentCommand:
     type: "object"
     properties:
-      DoRestoration:
+      doRestoration:
         description: Pass true for purchasing of Restoration (Not allowed if Restoration is producing)
         type: "boolean"
-      DoUpgrade:
+      doUpgrade:
         description: Pass true for purchasing of Upgrade (Not allowed if Upgrade is producing)
         type: "boolean"
 
   ProducingAgentInfo:
     type: "object"
     properties:
-      Id:
+      id:
         description: Agent ID
         type: "string"
-      CapacityType:
+      capacityType:
         description: Capacity type
-        type: "integer"
-      Capacity:
+        type: "string"
+      capacity:
         description: Current capacity value
         type: "integer"
-      MaxCapacity:
+      maxCapacity:
         description: Maximum capacity value
         type: "integer"
-      CutOffPrice:
+      cutOffPrice:
         description: The cut off price in the previous cycle
         type: "integer"
 
   OrderingAgentInfo:
     type: "object"
     properties:
-      Id:
+      id:
         description: Agent ID
         type: "string"
 
   SystemInfo:
     type: "object"
     properties:
-      CycleCounter:
+      cycleCounter:
         type: "integer"
-      State:
+      state:
         type: string
         enum:
           - OrdersPlacement
           - Ordering
+
+  CycleResult:
+    type: object
+    required:
+      - score
+    properties:
+      score:
+        type: integer
