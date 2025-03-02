@@ -32,7 +32,7 @@ func init() {
     "title": "tokenomics",
     "version": "1.0.0"
   },
-  "host": "localhost:9090",
+  "host": "localhost:8080",
   "basePath": "/",
   "paths": {
     "/ordering-agents": {
@@ -425,7 +425,7 @@ func init() {
     "title": "tokenomics",
     "version": "1.0.0"
   },
-  "host": "localhost:9090",
+  "host": "localhost:8080",
   "basePath": "/",
   "paths": {
     "/ordering-agents": {

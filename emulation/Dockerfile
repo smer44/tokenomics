@@ -17,4 +17,4 @@ WORKDIR /
 COPY --from=build /build/app .
 EXPOSE 8080
 
-ENTRYPOINT ["/app", "--port", "8080"] 
+ENTRYPOINT ["/app", "--port", "8080", "--host", "0.0.0.0"] 

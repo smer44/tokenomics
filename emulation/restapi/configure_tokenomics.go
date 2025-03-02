@@ -44,140 +44,129 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 
 	emulator := application.NewEmulator()
 
-	if api.TokenomicsCompleteCycleHandler == nil {
-		api.TokenomicsCompleteCycleHandler = tokenomics.CompleteCycleHandlerFunc(func(params tokenomics.CompleteCycleParams) middleware.Responder {
-			result, err := emulator.CompleteCycle()
-			if err != nil {
-				return middleware.Error(http.StatusBadRequest, err.Error())
-			}
-			return tokenomics.NewCompleteCycleOK().WithPayload(&models.CycleResult{
-				lo.ToPtr(int64(result.Score)),
-			})
+	api.TokenomicsCompleteCycleHandler = tokenomics.CompleteCycleHandlerFunc(func(params tokenomics.CompleteCycleParams) middleware.Responder {
+		result, err := emulator.CompleteCycle()
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return tokenomics.NewCompleteCycleOK().WithPayload(&models.CycleResult{
+			lo.ToPtr(int64(result.Score)),
 		})
-	}
-	if api.GetOrderingAgentViewHandler == nil {
-		api.GetOrderingAgentViewHandler = operations.GetOrderingAgentViewHandlerFunc(func(params operations.GetOrderingAgentViewParams) middleware.Responder {
-			result, err := emulator.GetOrderingAgentView(domain.OrderingAgentId(params.ID))
-			if err != nil {
-				return middleware.Error(http.StatusBadRequest, err.Error())
-			}
-			return operations.NewGetOrderingAgentViewOK().WithPayload(&models.OrderingAgentView{
-				lo.MapEntries(result.Incoming, func(oid domain.OrderId, val map[domain.CapacityType]domain.Capacity) (string, map[string]int64) {
-					return string(oid), lo.MapEntries(val, func(ct domain.CapacityType, cap domain.Capacity) (string, int64) {
-						return string(ct), int64(cap)
-					})
-				}),
-				lo.MapEntries(result.Producers, func(ct domain.CapacityType, val map[domain.ProducerId]domain.ProducerInfo) (string, map[string]models.ProducingAgentInfo) {
-					return string(ct), lo.MapEntries(val, func(pId domain.ProducerId, pInfo domain.ProducerInfo) (string, models.ProducingAgentInfo) {
-						return string(pId), models.ProducingAgentInfo{
-							int64(pInfo.Capacity),
-							string(pInfo.CapacityType),
-							int64(pInfo.CutOffPrice),
-							string(pInfo.Id),
-							int64(pInfo.MaxCapacity),
-						}
-					})
-				}),
-			})
-		})
-	}
-	if api.GetProducingAgentViewHandler == nil {
-		api.GetProducingAgentViewHandler = operations.GetProducingAgentViewHandlerFunc(func(params operations.GetProducingAgentViewParams) middleware.Responder {
-			result, err := emulator.GetProducingAgentView(domain.ProducerId(params.ID))
-			if err != nil {
-				return middleware.Error(http.StatusBadRequest, err.Error())
-			}
-			return operations.NewGetProducingAgentViewOK().WithPayload(&models.ProducingAgentView{
-				int64(result.Capacity),
-				int64(result.Degradation),
-				string(result.Id),
-				int64(result.MaxCapacity),
-				int64(result.RequestedCapacity),
-				int64(result.Restoration),
-				bool(result.RestorationRunning),
-				int64(result.Upgrade),
-				bool(result.UpgradeRunning),
-			})
-		})
-	}
-	if api.GetSystemInfoHandler == nil {
-		api.GetSystemInfoHandler = operations.GetSystemInfoHandlerFunc(func(params operations.GetSystemInfoParams) middleware.Responder {
-			info := emulator.GetSystemInfo()
-			return operations.NewGetSystemInfoOK().WithPayload([]*models.SystemInfo{
-				&info,
-			})
-		})
-	}
-	if api.ListOrderingAgentsHandler == nil {
-		api.ListOrderingAgentsHandler = operations.ListOrderingAgentsHandlerFunc(func(params operations.ListOrderingAgentsParams) middleware.Responder {
-			orderingAgents := emulator.GetOrderingAgentInfos()
-			result := make([]*models.OrderingAgentInfo, 0, len(orderingAgents))
-			for _, info := range orderingAgents {
-				result = append(result, &models.OrderingAgentInfo{
-					string(info.Id),
+	})
+
+	api.GetOrderingAgentViewHandler = operations.GetOrderingAgentViewHandlerFunc(func(params operations.GetOrderingAgentViewParams) middleware.Responder {
+		result, err := emulator.GetOrderingAgentView(domain.OrderingAgentId(params.ID))
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewGetOrderingAgentViewOK().WithPayload(&models.OrderingAgentView{
+			lo.MapEntries(result.Incoming, func(oid domain.OrderId, val map[domain.CapacityType]domain.Capacity) (string, map[string]int64) {
+				return string(oid), lo.MapEntries(val, func(ct domain.CapacityType, cap domain.Capacity) (string, int64) {
+					return string(ct), int64(cap)
 				})
-			}
-			return operations.NewListOrderingAgentsOK().WithPayload(result)
-		})
-	}
-	if api.ListProducingAgentsHandler == nil {
-		api.ListProducingAgentsHandler = operations.ListProducingAgentsHandlerFunc(func(params operations.ListProducingAgentsParams) middleware.Responder {
-			producerInfos := emulator.GetProducerInfos()
-			result := make([]*models.ProducingAgentInfo, 0, len(producerInfos))
-			for _, info := range producerInfos {
-				result = append(result, &models.ProducingAgentInfo{
-					int64(info.Capacity),
-					string(info.CapacityType),
-					int64(info.CutOffPrice),
-					string(info.Id),
-					int64(info.MaxCapacity),
+			}),
+			lo.MapEntries(result.Producers, func(ct domain.CapacityType, val map[domain.ProducerId]domain.ProducerInfo) (string, map[string]models.ProducingAgentInfo) {
+				return string(ct), lo.MapEntries(val, func(pId domain.ProducerId, pInfo domain.ProducerInfo) (string, models.ProducingAgentInfo) {
+					return string(pId), models.ProducingAgentInfo{
+						int64(pInfo.Capacity),
+						string(pInfo.CapacityType),
+						int64(pInfo.CutOffPrice),
+						string(pInfo.Id),
+						int64(pInfo.MaxCapacity),
+					}
 				})
-			}
-			return operations.NewListProducingAgentsOK().WithPayload(result)
+			}),
 		})
-	}
-	if api.TokenomicsResetSystemHandler == nil {
-		api.TokenomicsResetSystemHandler = tokenomics.ResetSystemHandlerFunc(func(params tokenomics.ResetSystemParams) middleware.Responder {
-			emulator.Reset()
-			return tokenomics.NewResetSystemOK()
+	})
+
+	api.GetProducingAgentViewHandler = operations.GetProducingAgentViewHandlerFunc(func(params operations.GetProducingAgentViewParams) middleware.Responder {
+		result, err := emulator.GetProducingAgentView(domain.ProducerId(params.ID))
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewGetProducingAgentViewOK().WithPayload(&models.ProducingAgentView{
+			int64(result.Capacity),
+			int64(result.Degradation),
+			string(result.Id),
+			int64(result.MaxCapacity),
+			int64(result.RequestedCapacity),
+			int64(result.Restoration),
+			bool(result.RestorationRunning),
+			int64(result.Upgrade),
+			bool(result.UpgradeRunning),
 		})
-	}
-	if api.SendOrderingAgentCommandHandler == nil {
-		api.SendOrderingAgentCommandHandler = operations.SendOrderingAgentCommandHandlerFunc(func(params operations.SendOrderingAgentCommandParams) middleware.Responder {
-			err := emulator.OrderingAgentAction(domain.OrderingAgentId(params.ID), domain.OrderingAgentCommand{
-				lo.MapEntries(params.Body.Orders, func(orderId string, producers map[string]int64) (domain.OrderId, map[domain.ProducerId]domain.Tokens) {
-					return domain.OrderId(orderId), lo.MapEntries(producers, func(producerId string, tokens int64) (domain.ProducerId, domain.Tokens) {
-						return domain.ProducerId(producerId), domain.Tokens(tokens)
-					})
-				}),
+	})
+
+	api.GetSystemInfoHandler = operations.GetSystemInfoHandlerFunc(func(params operations.GetSystemInfoParams) middleware.Responder {
+		info := emulator.GetSystemInfo()
+		return operations.NewGetSystemInfoOK().WithPayload([]*models.SystemInfo{
+			&info,
+		})
+	})
+
+	api.ListOrderingAgentsHandler = operations.ListOrderingAgentsHandlerFunc(func(params operations.ListOrderingAgentsParams) middleware.Responder {
+		orderingAgents := emulator.GetOrderingAgentInfos()
+		result := make([]*models.OrderingAgentInfo, 0, len(orderingAgents))
+		for _, info := range orderingAgents {
+			result = append(result, &models.OrderingAgentInfo{
+				string(info.Id),
 			})
-			if err != nil {
-				return middleware.Error(http.StatusBadRequest, err.Error())
-			}
-			return operations.NewSendOrderingAgentCommandOK()
-		})
-	}
-	if api.SendProducingAgentCommandHandler == nil {
-		api.SendProducingAgentCommandHandler = operations.SendProducingAgentCommandHandlerFunc(func(params operations.SendProducingAgentCommandParams) middleware.Responder {
-			err := emulator.ProducingAgentAction(domain.ProducerId(params.ID), domain.ProducingAgentCommand{
-				params.Body.DoRestoration,
-				params.Body.DoUpgrade,
+		}
+		return operations.NewListOrderingAgentsOK().WithPayload(result)
+	})
+
+	api.ListProducingAgentsHandler = operations.ListProducingAgentsHandlerFunc(func(params operations.ListProducingAgentsParams) middleware.Responder {
+		producerInfos := emulator.GetProducerInfos()
+		result := make([]*models.ProducingAgentInfo, 0, len(producerInfos))
+		for _, info := range producerInfos {
+			result = append(result, &models.ProducingAgentInfo{
+				int64(info.Capacity),
+				string(info.CapacityType),
+				int64(info.CutOffPrice),
+				string(info.Id),
+				int64(info.MaxCapacity),
 			})
-			if err != nil {
-				return middleware.Error(http.StatusBadRequest, err.Error())
-			}
-			return operations.NewSendProducingAgentCommandOK()
+		}
+		return operations.NewListProducingAgentsOK().WithPayload(result)
+	})
+
+	api.TokenomicsResetSystemHandler = tokenomics.ResetSystemHandlerFunc(func(params tokenomics.ResetSystemParams) middleware.Responder {
+		emulator.Reset()
+		return tokenomics.NewResetSystemOK()
+	})
+
+	api.SendOrderingAgentCommandHandler = operations.SendOrderingAgentCommandHandlerFunc(func(params operations.SendOrderingAgentCommandParams) middleware.Responder {
+		err := emulator.OrderingAgentAction(domain.OrderingAgentId(params.ID), domain.OrderingAgentCommand{
+			lo.MapEntries(params.Body.Orders, func(orderId string, producers map[string]int64) (domain.OrderId, map[domain.ProducerId]domain.Tokens) {
+				return domain.OrderId(orderId), lo.MapEntries(producers, func(producerId string, tokens int64) (domain.ProducerId, domain.Tokens) {
+					return domain.ProducerId(producerId), domain.Tokens(tokens)
+				})
+			}),
 		})
-	}
-	if api.TokenomicsStartOrderingHandler == nil {
-		api.TokenomicsStartOrderingHandler = tokenomics.StartOrderingHandlerFunc(func(params tokenomics.StartOrderingParams) middleware.Responder {
-			err := emulator.StartOrdering()
-			if err != nil {
-				return middleware.Error(http.StatusBadRequest, err.Error())
-			}
-			return tokenomics.NewStartOrderingOK()
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewSendOrderingAgentCommandOK()
+	})
+
+	api.SendProducingAgentCommandHandler = operations.SendProducingAgentCommandHandlerFunc(func(params operations.SendProducingAgentCommandParams) middleware.Responder {
+		err := emulator.ProducingAgentAction(domain.ProducerId(params.ID), domain.ProducingAgentCommand{
+			params.Body.DoRestoration,
+			params.Body.DoUpgrade,
 		})
-	}
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewSendProducingAgentCommandOK()
+	})
+
+	api.TokenomicsStartOrderingHandler = tokenomics.StartOrderingHandlerFunc(func(params tokenomics.StartOrderingParams) middleware.Responder {
+		err := emulator.StartOrdering()
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return tokenomics.NewStartOrderingOK()
+	})
 
 	api.PreServerShutdown = func() {}
 

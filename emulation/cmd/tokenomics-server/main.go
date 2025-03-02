@@ -49,6 +49,7 @@ func main() {
 	}
 
 	server.ConfigureAPI()
+	api.Init()
 
 	if err := server.Serve(); err != nil {
 		log.Fatalln(err)
