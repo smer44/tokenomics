@@ -4,13 +4,21 @@
     {
       "product": 1,
       "require": {
-        "capacity-1": 10
+        "capacity-1": 10,
+        "capacity-3": 5
       }
     },
     {
       "product": 2,
       "require": {
         "capacity-2": 200
+      }
+    },
+    {
+      "product": 3,
+      "require": {
+        "capacity-3": 50,
+        "capacity-4": 30
       }
     }
   ],
@@ -19,20 +27,57 @@
       "id": "p1",
       "type": "capacity-1",
       "capacity": 100,
-      "degradation": 1,
-      "restoration": {},
+      "degradation": 2,
+      "restoration": {
+        "product": 3,
+        "restores": 50
+      },
       "upgrade": {
-        "capacity": 50,
-        "product": 2
+        "product": 2,
+        "capacity": 50
       }
     },
     {
       "id": "p2",
       "type": "capacity-2",
-      "capacity": 110,
-      "degradation": 1,
-      "restoration": {},
-      "upgrade": {}
+      "capacity": 200,
+      "degradation": 5,
+      "restoration": {
+        "product": 1,
+        "restores": 100
+      },
+      "upgrade": {
+        "product": 3,
+        "capacity": 100
+      }
+    },
+    {
+      "id": "p3",
+      "type": "capacity-3",
+      "capacity": 150,
+      "degradation": 3,
+      "restoration": {
+        "product": 2,
+        "restores": 75
+      },
+      "upgrade": {
+        "product": 1,
+        "capacity": 75
+      }
+    },
+    {
+      "id": "p4",
+      "type": "capacity-4",
+      "capacity": 120,
+      "degradation": 4,
+      "restoration": {
+        "product": 1,
+        "restores": 60
+      },
+      "upgrade": {
+        "product": 2,
+        "capacity": 40
+      }
     }
   ]
 }

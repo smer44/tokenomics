@@ -5,6 +5,7 @@ import (
 	"emulation/models"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"sync"
@@ -26,6 +27,7 @@ type Emulator struct {
 }
 
 func NewEmulator() *Emulator {
+	slog.Info("emulator.initializing")
 	e := &Emulator{0, &sync.RWMutex{}, nil, nil}
 	e.Reset()
 	return e
@@ -34,6 +36,8 @@ func NewEmulator() *Emulator {
 func (e *Emulator) Reset() {
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
+
+	slog.Info("emulator.reset.started")
 
 	// Load configuration from JSON file
 	configData, err := os.ReadFile("config.json")
@@ -52,42 +56,123 @@ func (e *Emulator) Reset() {
 
 	e.system = domain.NewSystem(&e.idGen, &config, map[domain.ConsumerId]domain.Consumer{})
 	e.config = &config
+
+	slog.Info("emulator.reset.completed",
+		slog.Int("cycleEmission", int(config.CycleEmission)),
+		slog.Int("processSheets", len(config.ProcessSheets)),
+		slog.Int("producers", len(config.ProducerConfigs)))
 }
 
 func (e *Emulator) GetOrderingAgentView(id domain.OrderingAgentId) (domain.OrderingAgentView, error) {
 	e.rwMu.RLock()
 	defer e.rwMu.RUnlock()
-	return e.system.OrderingAgentView(id)
+
+	view, err := e.system.OrderingAgentView(id)
+	if err != nil {
+		slog.Error("emulator.get_ordering_agent_view.failed",
+			slog.String("agentId", string(id)),
+			slog.String("error", err.Error()))
+		return view, err
+	}
+
+	slog.Info("emulator.get_ordering_agent_view.success",
+		slog.String("agentId", string(id)),
+		slog.Int("incomingOrders", len(view.Incoming)))
+	return view, nil
 }
 
 func (e *Emulator) GetProducingAgentView(id domain.ProducerId) (domain.ProducingAgentView, error) {
 	e.rwMu.RLock()
 	defer e.rwMu.RUnlock()
-	return e.system.ProducingAgentView(id)
+
+	view, err := e.system.ProducingAgentView(id)
+	if err != nil {
+		slog.Error("emulator.get_producing_agent_view.failed",
+			slog.String("producerId", string(id)),
+			slog.String("error", err.Error()))
+		return view, err
+	}
+
+	slog.Info("emulator.get_producing_agent_view.success",
+		slog.String("producerId", string(id)),
+		slog.Int("capacity", int(view.Capacity)),
+		slog.Int("maxCapacity", int(view.MaxCapacity)))
+	return view, nil
 }
 
 func (e *Emulator) OrderingAgentAction(id domain.OrderingAgentId, cmd domain.OrderingAgentCommand) error {
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
-	return e.system.OrderingAgentAction(id, cmd)
+
+	slog.Info("emulator.ordering_agent_action.started",
+		slog.String("agentId", string(id)),
+		slog.Int("orders", len(cmd.Orders)))
+
+	if err := e.system.OrderingAgentAction(id, cmd); err != nil {
+		slog.Error("emulator.ordering_agent_action.failed",
+			slog.String("agentId", string(id)),
+			slog.String("error", err.Error()))
+		return err
+	}
+
+	slog.Info("emulator.ordering_agent_action.completed",
+		slog.String("agentId", string(id)))
+	return nil
 }
 
 func (e *Emulator) ProducingAgentAction(id domain.ProducerId, cmd domain.ProducingAgentCommand) error {
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
-	return e.system.ProducingAgentAction(id, cmd)
+
+	slog.Info("emulator.producing_agent_action.started",
+		slog.String("producerId", string(id)),
+		slog.Bool("doUpgrade", cmd.DoUpgrade),
+		slog.Bool("doRestoration", cmd.DoRestoration))
+
+	if err := e.system.ProducingAgentAction(id, cmd); err != nil {
+		slog.Error("emulator.producing_agent_action.failed",
+			slog.String("producerId", string(id)),
+			slog.String("error", err.Error()))
+		return err
+	}
+
+	slog.Info("emulator.producing_agent_action.completed",
+		slog.String("producerId", string(id)))
+	return nil
 }
 
 func (e *Emulator) StartOrdering() error {
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
-	return e.system.StartOrdering()
+
+	slog.Info("emulator.start_ordering.started")
+
+	if err := e.system.StartOrdering(); err != nil {
+		slog.Error("emulator.start_ordering.failed",
+			slog.String("error", err.Error()))
+		return err
+	}
+
+	slog.Info("emulator.start_ordering.completed")
+	return nil
 }
 
 func (e *Emulator) CompleteCycle() (domain.CycleResult, error) {
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
-	return e.system.CompleteCycle()
+
+	slog.Info("emulator.complete_cycle.started")
+
+	result, err := e.system.CompleteCycle()
+	if err != nil {
+		slog.Error("emulator.complete_cycle.failed",
+			slog.String("error", err.Error()))
+		return result, err
+	}
+
+	slog.Info("emulator.complete_cycle.completed",
+		slog.Int("score", int(result.Score)))
+	return result, nil
 }
 
 func (e *Emulator) GetProducerInfos() map[domain.ProducerId]domain.ProducerInfo {
@@ -125,6 +210,14 @@ func (e *Emulator) GetConfig() *domain.Configuration {
 func (e *Emulator) UpdateConfig(config *domain.Configuration) error {
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
+
+	slog.Info("emulator.update_config.started",
+		slog.Int("cycleEmission", int(config.CycleEmission)),
+		slog.Int("processSheets", len(config.ProcessSheets)),
+		slog.Int("producers", len(config.ProducerConfigs)))
+
 	e.config = config
+
+	slog.Info("emulator.update_config.completed")
 	return nil
 }
