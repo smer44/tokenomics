@@ -47,13 +47,19 @@ func (t *TestIdGenerator) New() OrderId {
 
 var _ OrderIdGenerator = &TestIdGenerator{}
 
-func TestSystem(t *testing.T) {
-	require.True(t, cmp.Equal(UndefinedPrice, UndefinedPrice))
+type testConfig struct {
+	config          *Configuration
+	cpt1            CapacityType
+	cpt2            CapacityType
+	consumerProduct Product
+}
 
+func setupTestConfig() testConfig {
 	cpt1 := CapacityType("1")
 	cpt2 := CapacityType("2")
 	consumerProduct := Product(1)
 	investmentProduct := Product(2)
+
 	sheets := []ProcessSheet{
 		{consumerProduct, map[CapacityType]Capacity{
 			cpt1: 10,
@@ -62,17 +68,35 @@ func TestSystem(t *testing.T) {
 			cpt2: 200,
 		}},
 	}
-	consumer1 := TestConsumer{id: "c1", products: []Product{consumerProduct}}
+
 	pac1 := ProducingAgentConfig{"p1", cpt1, 100, 1, Restoration{}, Upgrade{investmentProduct, 50}}
 	pac2 := ProducingAgentConfig{"p2", cpt2, 110, 1, Restoration{}, Upgrade{}}
 	producerConfigs := []ProducingAgentConfig{pac1, pac2}
+
+	return testConfig{
+		config: &Configuration{
+			CycleEmission:   100,
+			ProcessSheets:   sheets,
+			ProducerConfigs: producerConfigs,
+		},
+		cpt1:            cpt1,
+		cpt2:            cpt2,
+		consumerProduct: consumerProduct,
+	}
+}
+
+func TestSystem(t *testing.T) {
+	require.True(t, cmp.Equal(UndefinedPrice, UndefinedPrice))
+
+	cfg := setupTestConfig()
+	consumer1 := TestConsumer{id: "c1", products: []Product{cfg.consumerProduct}}
 
 	t.Run(`Given the empty system
 		When consumer orders a product
 		And the power request is less than the producer's capacity
 		Then the product is produced in a single cycle`, func(t *testing.T) {
 
-		system := NewSystem(&TestIdGenerator{}, 100, sheets, producerConfigs, map[ConsumerId]Consumer{"c1": &consumer1})
+		system := NewSystem(&TestIdGenerator{}, cfg.config, map[ConsumerId]Consumer{"c1": &consumer1})
 		// Investment
 		pav, err := system.ProducingAgentView("p1")
 		require.NoError(t, err)
@@ -85,10 +109,10 @@ func TestSystem(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, cmp.Equal(OrderingAgentView{
 			Incoming: map[OrderId]map[CapacityType]Capacity{
-				"0": {cpt1: 10},
+				"0": {cfg.cpt1: 10},
 			},
 			Producers: map[CapacityType]map[ProducerId]ProducerInfo{
-				cpt1: {"p1": ProducerInfo{"p1", cpt1, 100, 100, UndefinedPrice}},
+				cfg.cpt1: {"p1": ProducerInfo{"p1", cfg.cpt1, 100, 100, UndefinedPrice}},
 			},
 		}, oav))
 		err = system.OrderingAgentAction("c1", OrderingAgentCommand{
@@ -110,7 +134,7 @@ func TestSystem(t *testing.T) {
 		Then the Upgrade is produced in 2 cycles
 		And capacity of the ordered producer is increased`, func(t *testing.T) {
 
-		system := NewSystem(&TestIdGenerator{}, 100, sheets, producerConfigs, map[ConsumerId]Consumer{})
+		system := NewSystem(&TestIdGenerator{}, cfg.config, map[ConsumerId]Consumer{})
 		// Investment
 		pav, err := system.ProducingAgentView("p1")
 		require.NoError(t, err)
@@ -123,10 +147,10 @@ func TestSystem(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, cmp.Equal(OrderingAgentView{
 			Incoming: map[OrderId]map[CapacityType]Capacity{
-				"0": {cpt2: 200},
+				"0": {cfg.cpt2: 200},
 			},
 			Producers: map[CapacityType]map[ProducerId]ProducerInfo{
-				cpt2: {"p2": ProducerInfo{"p2", cpt2, 110, 110, UndefinedPrice}},
+				cfg.cpt2: {"p2": ProducerInfo{"p2", cfg.cpt2, 110, 110, UndefinedPrice}},
 			},
 		}, oav))
 		err = system.OrderingAgentAction("p1", OrderingAgentCommand{

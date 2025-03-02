@@ -50,19 +50,19 @@ type System struct {
 	cycleCounter    uint
 }
 
-func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []ProducingAgentConfig, consumers map[ConsumerId]Consumer) *System {
+func NewSystem(idGen OrderIdGenerator, config *Configuration, consumers map[ConsumerId]Consumer) *System {
 	s := &System{
 		SystemStateOrdersPlacement,
 		idGen,
-		emission,
+		config.CycleEmission,
 		0,
-		lo.SliceToMap(ps, func(ps ProcessSheet) (Product, ProcessSheet) {
+		lo.SliceToMap(config.ProcessSheets, func(ps ProcessSheet) (Product, ProcessSheet) {
 			return ps.Product, ps
 		}),
-		lo.SliceToMap(pa, func(p ProducingAgentConfig) (CapacityType, []ProducerId) {
+		lo.SliceToMap(config.ProducerConfigs, func(p ProducingAgentConfig) (CapacityType, []ProducerId) {
 			return p.Type, []ProducerId{p.Id}
 		}),
-		lo.SliceToMap(pa, func(p ProducingAgentConfig) (ProducerId, *ProducingAgent) {
+		lo.SliceToMap(config.ProducerConfigs, func(p ProducingAgentConfig) (ProducerId, *ProducingAgent) {
 			return p.Id, newProducingAgent(p)
 		}),
 		nil,
@@ -275,11 +275,6 @@ func (s *System) CompleteCycle() (CycleResult, error) {
 	}
 	s.startCycle()
 	return CycleResult{cycleScore}, nil
-}
-
-type ProcessSheet struct {
-	Product Product                   `json:"product"`
-	Require map[CapacityType]Capacity `json:"require"`
 }
 
 func (s *System) GetProducerInfos() map[ProducerId]ProducerInfo {

@@ -47,6 +47,9 @@ func NewTokenomicsAPI(spec *loads.Document) *TokenomicsAPI {
 		TokenomicsCompleteCycleHandler: tokenomics.CompleteCycleHandlerFunc(func(params tokenomics.CompleteCycleParams) middleware.Responder {
 			return middleware.NotImplemented("operation tokenomics.CompleteCycle has not yet been implemented")
 		}),
+		GetConfigHandler: GetConfigHandlerFunc(func(params GetConfigParams) middleware.Responder {
+			return middleware.NotImplemented("operation GetConfig has not yet been implemented")
+		}),
 		GetOrderingAgentViewHandler: GetOrderingAgentViewHandlerFunc(func(params GetOrderingAgentViewParams) middleware.Responder {
 			return middleware.NotImplemented("operation GetOrderingAgentView has not yet been implemented")
 		}),
@@ -73,6 +76,9 @@ func NewTokenomicsAPI(spec *loads.Document) *TokenomicsAPI {
 		}),
 		TokenomicsStartOrderingHandler: tokenomics.StartOrderingHandlerFunc(func(params tokenomics.StartOrderingParams) middleware.Responder {
 			return middleware.NotImplemented("operation tokenomics.StartOrdering has not yet been implemented")
+		}),
+		UpdateConfigHandler: UpdateConfigHandlerFunc(func(params UpdateConfigParams) middleware.Responder {
+			return middleware.NotImplemented("operation UpdateConfig has not yet been implemented")
 		}),
 	}
 }
@@ -112,6 +118,8 @@ type TokenomicsAPI struct {
 
 	// TokenomicsCompleteCycleHandler sets the operation handler for the complete cycle operation
 	TokenomicsCompleteCycleHandler tokenomics.CompleteCycleHandler
+	// GetConfigHandler sets the operation handler for the get config operation
+	GetConfigHandler GetConfigHandler
 	// GetOrderingAgentViewHandler sets the operation handler for the get ordering agent view operation
 	GetOrderingAgentViewHandler GetOrderingAgentViewHandler
 	// GetProducingAgentViewHandler sets the operation handler for the get producing agent view operation
@@ -130,6 +138,8 @@ type TokenomicsAPI struct {
 	SendProducingAgentCommandHandler SendProducingAgentCommandHandler
 	// TokenomicsStartOrderingHandler sets the operation handler for the start ordering operation
 	TokenomicsStartOrderingHandler tokenomics.StartOrderingHandler
+	// UpdateConfigHandler sets the operation handler for the update config operation
+	UpdateConfigHandler UpdateConfigHandler
 
 	// ServeError is called when an error is received, there is a default handler
 	// but you can set your own with this
@@ -210,6 +220,9 @@ func (o *TokenomicsAPI) Validate() error {
 	if o.TokenomicsCompleteCycleHandler == nil {
 		unregistered = append(unregistered, "tokenomics.CompleteCycleHandler")
 	}
+	if o.GetConfigHandler == nil {
+		unregistered = append(unregistered, "GetConfigHandler")
+	}
 	if o.GetOrderingAgentViewHandler == nil {
 		unregistered = append(unregistered, "GetOrderingAgentViewHandler")
 	}
@@ -236,6 +249,9 @@ func (o *TokenomicsAPI) Validate() error {
 	}
 	if o.TokenomicsStartOrderingHandler == nil {
 		unregistered = append(unregistered, "tokenomics.StartOrderingHandler")
+	}
+	if o.UpdateConfigHandler == nil {
+		unregistered = append(unregistered, "UpdateConfigHandler")
 	}
 
 	if len(unregistered) > 0 {
@@ -332,6 +348,10 @@ func (o *TokenomicsAPI) initHandlerCache() {
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
+	o.handlers["GET"]["/config"] = NewGetConfig(o.context, o.GetConfigHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
 	o.handlers["GET"]["/ordering-agents/{id}"] = NewGetOrderingAgentView(o.context, o.GetOrderingAgentViewHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
@@ -365,6 +385,10 @@ func (o *TokenomicsAPI) initHandlerCache() {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
 	o.handlers["POST"]["/system/start-ordering"] = tokenomics.NewStartOrdering(o.context, o.TokenomicsStartOrderingHandler)
+	if o.handlers["PUT"] == nil {
+		o.handlers["PUT"] = make(map[string]http.Handler)
+	}
+	o.handlers["PUT"]["/config"] = NewUpdateConfig(o.context, o.UpdateConfigHandler)
 }
 
 // Serve creates a http handler to serve the API over HTTP

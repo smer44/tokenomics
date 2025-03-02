@@ -168,6 +168,75 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 		return tokenomics.NewStartOrderingOK()
 	})
 
+	api.GetConfigHandler = operations.GetConfigHandlerFunc(func(params operations.GetConfigParams) middleware.Responder {
+		config := emulator.GetConfig()
+		if config == nil {
+			return middleware.Error(http.StatusNotFound, "configuration not found")
+		}
+
+		return operations.NewGetConfigOK().WithPayload(&models.Configuration{
+			CycleEmission: lo.ToPtr(int64(config.CycleEmission)),
+			ProcessSheets: lo.Map(config.ProcessSheets, func(ps domain.ProcessSheet, _ int) *models.ProcessSheet {
+				return &models.ProcessSheet{
+					Product: lo.ToPtr(int64(ps.Product)),
+					Require: lo.MapEntries(ps.Require, func(ct domain.CapacityType, cap domain.Capacity) (string, int64) {
+						return string(ct), int64(cap)
+					}),
+				}
+			}),
+			ProducerConfigs: lo.Map(config.ProducerConfigs, func(pc domain.ProducingAgentConfig, _ int) *models.ProducingAgentConfig {
+				return &models.ProducingAgentConfig{
+					ID:          lo.ToPtr(string(pc.Id)),
+					Type:        lo.ToPtr(string(pc.Type)),
+					Capacity:    lo.ToPtr(int64(pc.Capacity)),
+					Degradation: lo.ToPtr(int64(pc.Degradation)),
+					Restoration: struct{}{},
+					Upgrade: &models.Upgrade{
+						Product:  int64(pc.Upgrade.Require),
+						Capacity: int64(pc.Upgrade.Increases),
+					},
+				}
+			}),
+		})
+	})
+
+	api.UpdateConfigHandler = operations.UpdateConfigHandlerFunc(func(params operations.UpdateConfigParams) middleware.Responder {
+		config := &domain.Configuration{
+			CycleEmission: domain.Tokens(lo.FromPtr(params.Body.CycleEmission)),
+			ProcessSheets: lo.Map(params.Body.ProcessSheets, func(ps *models.ProcessSheet, _ int) domain.ProcessSheet {
+				return domain.ProcessSheet{
+					Product: domain.Product(lo.FromPtr(ps.Product)),
+					Require: lo.MapEntries(ps.Require, func(ct string, cap int64) (domain.CapacityType, domain.Capacity) {
+						return domain.CapacityType(ct), domain.Capacity(cap)
+					}),
+				}
+			}),
+			ProducerConfigs: lo.Map(params.Body.ProducerConfigs, func(pc *models.ProducingAgentConfig, _ int) domain.ProducingAgentConfig {
+				return domain.ProducingAgentConfig{
+					Id:          domain.ProducerId(lo.FromPtr(pc.ID)),
+					Type:        domain.CapacityType(lo.FromPtr(pc.Type)),
+					Capacity:    domain.Capacity(lo.FromPtr(pc.Capacity)),
+					Degradation: domain.DegradationRate(lo.FromPtr(pc.Degradation)),
+					Restoration: domain.Restoration{},
+					Upgrade: domain.Upgrade{
+						Require:   domain.Product(pc.Upgrade.Product),
+						Increases: domain.Capacity(pc.Upgrade.Capacity),
+					},
+				}
+			}),
+		}
+
+		if err := config.Validate(); err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+
+		if err := emulator.UpdateConfig(config); err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+
+		return operations.NewUpdateConfigOK()
+	})
+
 	api.PreServerShutdown = func() {}
 
 	api.ServerShutdown = func() {}

@@ -132,6 +132,31 @@ paths:
       responses:
         200:
           description: "Command processed successfully"
+
+  /config:
+    get:
+      operationId: getConfig
+      summary: Get current system configuration
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: "#/definitions/Configuration"
+    put:
+      operationId: updateConfig
+      summary: Update system configuration
+      parameters:
+        - name: "body"
+          in: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/Configuration"
+      responses:
+        200:
+          description: Configuration updated successfully
+        400:
+          description: Invalid configuration
+
 definitions:
   OrderingAgentView:
     description: Ordering agent view
@@ -273,3 +298,76 @@ definitions:
     properties:
       score:
         type: integer
+
+  Configuration:
+    type: "object"
+    required:
+      - cycleEmission
+      - processSheets
+      - producerConfigs
+    properties:
+      cycleEmission:
+        type: "integer"
+        description: "Amount of tokens emitted each cycle"
+      processSheets:
+        type: "array"
+        items:
+          $ref: "#/definitions/ProcessSheet"
+      producerConfigs:
+        type: "array"
+        items:
+          $ref: "#/definitions/ProducingAgentConfig"
+
+  ProcessSheet:
+    type: "object"
+    required:
+      - product
+      - require
+    properties:
+      product:
+        type: "integer"
+        description: "Product identifier"
+      require:
+        type: "object"
+        additionalProperties:
+          type: "integer"
+        description: "Map of capacity type to required capacity"
+
+  ProducingAgentConfig:
+    type: "object"
+    required:
+      - id
+      - type
+      - capacity
+      - degradation
+    properties:
+      id:
+        type: "string"
+        description: "Producer identifier"
+      type:
+        type: "string"
+        description: "Capacity type"
+      capacity:
+        type: "integer"
+        description: "Initial capacity"
+      degradation:
+        type: "integer"
+        description: "Degradation rate"
+      restoration:
+        $ref: "#/definitions/Restoration"
+      upgrade:
+        $ref: "#/definitions/Upgrade"
+
+  Restoration:
+    type: "object"
+    properties: {}
+
+  Upgrade:
+    type: "object"
+    properties:
+      product:
+        type: "integer"
+        description: "Product required for upgrade"
+      capacity:
+        type: "integer"
+        description: "Capacity increase after upgrade"

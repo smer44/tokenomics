@@ -35,6 +35,42 @@ func init() {
   "host": "localhost:8080",
   "basePath": "/",
   "paths": {
+    "/config": {
+      "get": {
+        "summary": "Get current system configuration",
+        "operationId": "getConfig",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update system configuration",
+        "operationId": "updateConfig",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration updated successfully"
+          },
+          "400": {
+            "description": "Invalid configuration"
+          }
+        }
+      }
+    },
     "/ordering-agents": {
       "get": {
         "summary": "Get ordering agents list",
@@ -217,6 +253,32 @@ func init() {
     }
   },
   "definitions": {
+    "Configuration": {
+      "type": "object",
+      "required": [
+        "cycleEmission",
+        "processSheets",
+        "producerConfigs"
+      ],
+      "properties": {
+        "cycleEmission": {
+          "description": "Amount of tokens emitted each cycle",
+          "type": "integer"
+        },
+        "processSheets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProcessSheet"
+          }
+        },
+        "producerConfigs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProducingAgentConfig"
+          }
+        }
+      }
+    },
     "CycleResult": {
       "type": "object",
       "required": [
@@ -314,6 +376,26 @@ func init() {
         }
       }
     },
+    "ProcessSheet": {
+      "type": "object",
+      "required": [
+        "product",
+        "require"
+      ],
+      "properties": {
+        "product": {
+          "description": "Product identifier",
+          "type": "integer"
+        },
+        "require": {
+          "description": "Map of capacity type to required capacity",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    },
     "ProducingAgentCommand": {
       "type": "object",
       "properties": {
@@ -324,6 +406,39 @@ func init() {
         "doUpgrade": {
           "description": "Pass true for purchasing of Upgrade (Not allowed if Upgrade is producing)",
           "type": "boolean"
+        }
+      }
+    },
+    "ProducingAgentConfig": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "capacity",
+        "degradation"
+      ],
+      "properties": {
+        "capacity": {
+          "description": "Initial capacity",
+          "type": "integer"
+        },
+        "degradation": {
+          "description": "Degradation rate",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Producer identifier",
+          "type": "string"
+        },
+        "restoration": {
+          "$ref": "#/definitions/Restoration"
+        },
+        "type": {
+          "description": "Capacity type",
+          "type": "string"
+        },
+        "upgrade": {
+          "$ref": "#/definitions/Upgrade"
         }
       }
     },
@@ -393,6 +508,9 @@ func init() {
         }
       }
     },
+    "Restoration": {
+      "type": "object"
+    },
     "SystemInfo": {
       "type": "object",
       "properties": {
@@ -405,6 +523,19 @@ func init() {
             "OrdersPlacement",
             "Ordering"
           ]
+        }
+      }
+    },
+    "Upgrade": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "description": "Capacity increase after upgrade",
+          "type": "integer"
+        },
+        "product": {
+          "description": "Product required for upgrade",
+          "type": "integer"
         }
       }
     }
@@ -428,6 +559,42 @@ func init() {
   "host": "localhost:8080",
   "basePath": "/",
   "paths": {
+    "/config": {
+      "get": {
+        "summary": "Get current system configuration",
+        "operationId": "getConfig",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update system configuration",
+        "operationId": "updateConfig",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration updated successfully"
+          },
+          "400": {
+            "description": "Invalid configuration"
+          }
+        }
+      }
+    },
     "/ordering-agents": {
       "get": {
         "summary": "Get ordering agents list",
@@ -610,6 +777,32 @@ func init() {
     }
   },
   "definitions": {
+    "Configuration": {
+      "type": "object",
+      "required": [
+        "cycleEmission",
+        "processSheets",
+        "producerConfigs"
+      ],
+      "properties": {
+        "cycleEmission": {
+          "description": "Amount of tokens emitted each cycle",
+          "type": "integer"
+        },
+        "processSheets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProcessSheet"
+          }
+        },
+        "producerConfigs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProducingAgentConfig"
+          }
+        }
+      }
+    },
     "CycleResult": {
       "type": "object",
       "required": [
@@ -707,6 +900,26 @@ func init() {
         }
       }
     },
+    "ProcessSheet": {
+      "type": "object",
+      "required": [
+        "product",
+        "require"
+      ],
+      "properties": {
+        "product": {
+          "description": "Product identifier",
+          "type": "integer"
+        },
+        "require": {
+          "description": "Map of capacity type to required capacity",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    },
     "ProducingAgentCommand": {
       "type": "object",
       "properties": {
@@ -717,6 +930,39 @@ func init() {
         "doUpgrade": {
           "description": "Pass true for purchasing of Upgrade (Not allowed if Upgrade is producing)",
           "type": "boolean"
+        }
+      }
+    },
+    "ProducingAgentConfig": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "capacity",
+        "degradation"
+      ],
+      "properties": {
+        "capacity": {
+          "description": "Initial capacity",
+          "type": "integer"
+        },
+        "degradation": {
+          "description": "Degradation rate",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Producer identifier",
+          "type": "string"
+        },
+        "restoration": {
+          "$ref": "#/definitions/Restoration"
+        },
+        "type": {
+          "description": "Capacity type",
+          "type": "string"
+        },
+        "upgrade": {
+          "$ref": "#/definitions/Upgrade"
         }
       }
     },
@@ -786,6 +1032,9 @@ func init() {
         }
       }
     },
+    "Restoration": {
+      "type": "object"
+    },
     "SystemInfo": {
       "type": "object",
       "properties": {
@@ -798,6 +1047,19 @@ func init() {
             "OrdersPlacement",
             "Ordering"
           ]
+        }
+      }
+    },
+    "Upgrade": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "description": "Capacity increase after upgrade",
+          "type": "integer"
+        },
+        "product": {
+          "description": "Product required for upgrade",
+          "type": "integer"
         }
       }
     }

@@ -3,6 +3,9 @@ package application
 import (
 	"emulation/domain"
 	"emulation/models"
+	"encoding/json"
+	"log"
+	"os"
 	"strconv"
 	"sync"
 )
@@ -19,33 +22,36 @@ type Emulator struct {
 	idGen  sequentialGenerator
 	rwMu   *sync.RWMutex
 	system *domain.System
+	config *domain.Configuration
 }
 
 func NewEmulator() *Emulator {
-	e := &Emulator{0, &sync.RWMutex{}, nil}
+	e := &Emulator{0, &sync.RWMutex{}, nil, nil}
 	e.Reset()
 	return e
 }
 
 func (e *Emulator) Reset() {
-	cpt1 := domain.CapacityType("capacity-1")
-	cpt2 := domain.CapacityType("capacity-2")
-	consumerProduct := domain.Product(1)
-	investmentProduct := domain.Product(2)
-	sheets := []domain.ProcessSheet{
-		{consumerProduct, map[domain.CapacityType]domain.Capacity{
-			cpt1: 10,
-		}},
-		{investmentProduct, map[domain.CapacityType]domain.Capacity{
-			cpt2: 200,
-		}},
-	}
-	pac1 := domain.ProducingAgentConfig{"p1", cpt1, 100, 1, domain.Restoration{}, domain.Upgrade{investmentProduct, 50}}
-	pac2 := domain.ProducingAgentConfig{"p2", cpt2, 110, 1, domain.Restoration{}, domain.Upgrade{}}
-	producerConfigs := []domain.ProducingAgentConfig{pac1, pac2}
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
-	e.system = domain.NewSystem(&e.idGen, 1000, sheets, producerConfigs, map[domain.ConsumerId]domain.Consumer{})
+
+	// Load configuration from JSON file
+	configData, err := os.ReadFile("config.json")
+	if err != nil {
+		log.Fatalf("Failed to read config file: %v", err)
+	}
+
+	var config domain.Configuration
+	if err := json.Unmarshal(configData, &config); err != nil {
+		log.Fatalf("Failed to parse config file: %v", err)
+	}
+
+	if err := config.Validate(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
+	}
+
+	e.system = domain.NewSystem(&e.idGen, &config, map[domain.ConsumerId]domain.Consumer{})
+	e.config = &config
 }
 
 func (e *Emulator) GetOrderingAgentView(id domain.OrderingAgentId) (domain.OrderingAgentView, error) {
@@ -108,4 +114,17 @@ func (e *Emulator) GetSystemInfo() models.SystemInfo {
 		State:        state,
 		CycleCounter: int64(info.CycleCounter),
 	}
+}
+
+func (e *Emulator) GetConfig() *domain.Configuration {
+	e.rwMu.RLock()
+	defer e.rwMu.RUnlock()
+	return e.config
+}
+
+func (e *Emulator) UpdateConfig(config *domain.Configuration) error {
+	e.rwMu.Lock()
+	defer e.rwMu.Unlock()
+	e.config = config
+	return nil
 }

@@ -1,0 +1,38 @@
+{
+  "cycleEmission": 1000,
+  "processSheets": [
+    {
+      "product": 1,
+      "require": {
+        "capacity-1": 10
+      }
+    },
+    {
+      "product": 2,
+      "require": {
+        "capacity-2": 200
+      }
+    }
+  ],
+  "producerConfigs": [
+    {
+      "id": "p1",
+      "type": "capacity-1",
+      "capacity": 100,
+      "degradation": 1,
+      "restoration": {},
+      "upgrade": {
+        "capacity": 50,
+        "product": 2
+      }
+    },
+    {
+      "id": "p2",
+      "type": "capacity-2",
+      "capacity": 110,
+      "degradation": 1,
+      "restoration": {},
+      "upgrade": {}
+    }
+  ]
+}

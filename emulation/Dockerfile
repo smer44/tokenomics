@@ -15,6 +15,7 @@ RUN go test ./... && go build -o app ./cmd/tokenomics-server
 FROM alpine:latest
 WORKDIR /
 COPY --from=build /build/app .
+COPY --from=build /build/config.json .
 EXPOSE 8080
 
 ENTRYPOINT ["/app", "--port", "8080", "--host", "0.0.0.0"] 
