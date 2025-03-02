@@ -44,26 +44,41 @@ func NewTokenomicsAPI(spec *loads.Document) *TokenomicsAPI {
 
 		JSONProducer: runtime.JSONProducer(),
 
-		GetOrderingAgentsIDHandler: GetOrderingAgentsIDHandlerFunc(func(params GetOrderingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation GetOrderingAgentsID has not yet been implemented")
+		TokenomicsCompleteCycleHandler: tokenomics.CompleteCycleHandlerFunc(func(params tokenomics.CompleteCycleParams) middleware.Responder {
+			return middleware.NotImplemented("operation tokenomics.CompleteCycle has not yet been implemented")
 		}),
-		GetProducingAgentsIDHandler: GetProducingAgentsIDHandlerFunc(func(params GetProducingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation GetProducingAgentsID has not yet been implemented")
+		GetConfigHandler: GetConfigHandlerFunc(func(params GetConfigParams) middleware.Responder {
+			return middleware.NotImplemented("operation GetConfig has not yet been implemented")
 		}),
-		PostOrderingAgentsIDHandler: PostOrderingAgentsIDHandlerFunc(func(params PostOrderingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation PostOrderingAgentsID has not yet been implemented")
+		GetOrderingAgentViewHandler: GetOrderingAgentViewHandlerFunc(func(params GetOrderingAgentViewParams) middleware.Responder {
+			return middleware.NotImplemented("operation GetOrderingAgentView has not yet been implemented")
 		}),
-		PostProducingAgentsIDHandler: PostProducingAgentsIDHandlerFunc(func(params PostProducingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation PostProducingAgentsID has not yet been implemented")
+		GetProducingAgentViewHandler: GetProducingAgentViewHandlerFunc(func(params GetProducingAgentViewParams) middleware.Responder {
+			return middleware.NotImplemented("operation GetProducingAgentView has not yet been implemented")
 		}),
 		GetSystemInfoHandler: GetSystemInfoHandlerFunc(func(params GetSystemInfoParams) middleware.Responder {
 			return middleware.NotImplemented("operation GetSystemInfo has not yet been implemented")
 		}),
-		ListProducersHandler: ListProducersHandlerFunc(func(params ListProducersParams) middleware.Responder {
-			return middleware.NotImplemented("operation ListProducers has not yet been implemented")
+		ListOrderingAgentsHandler: ListOrderingAgentsHandlerFunc(func(params ListOrderingAgentsParams) middleware.Responder {
+			return middleware.NotImplemented("operation ListOrderingAgents has not yet been implemented")
+		}),
+		ListProducingAgentsHandler: ListProducingAgentsHandlerFunc(func(params ListProducingAgentsParams) middleware.Responder {
+			return middleware.NotImplemented("operation ListProducingAgents has not yet been implemented")
 		}),
 		TokenomicsResetSystemHandler: tokenomics.ResetSystemHandlerFunc(func(params tokenomics.ResetSystemParams) middleware.Responder {
 			return middleware.NotImplemented("operation tokenomics.ResetSystem has not yet been implemented")
+		}),
+		SendOrderingAgentCommandHandler: SendOrderingAgentCommandHandlerFunc(func(params SendOrderingAgentCommandParams) middleware.Responder {
+			return middleware.NotImplemented("operation SendOrderingAgentCommand has not yet been implemented")
+		}),
+		SendProducingAgentCommandHandler: SendProducingAgentCommandHandlerFunc(func(params SendProducingAgentCommandParams) middleware.Responder {
+			return middleware.NotImplemented("operation SendProducingAgentCommand has not yet been implemented")
+		}),
+		TokenomicsStartOrderingHandler: tokenomics.StartOrderingHandlerFunc(func(params tokenomics.StartOrderingParams) middleware.Responder {
+			return middleware.NotImplemented("operation tokenomics.StartOrdering has not yet been implemented")
+		}),
+		UpdateConfigHandler: UpdateConfigHandlerFunc(func(params UpdateConfigParams) middleware.Responder {
+			return middleware.NotImplemented("operation UpdateConfig has not yet been implemented")
 		}),
 	}
 }
@@ -101,20 +116,30 @@ type TokenomicsAPI struct {
 	//   - application/json
 	JSONProducer runtime.Producer
 
-	// GetOrderingAgentsIDHandler sets the operation handler for the get ordering agents ID operation
-	GetOrderingAgentsIDHandler GetOrderingAgentsIDHandler
-	// GetProducingAgentsIDHandler sets the operation handler for the get producing agents ID operation
-	GetProducingAgentsIDHandler GetProducingAgentsIDHandler
-	// PostOrderingAgentsIDHandler sets the operation handler for the post ordering agents ID operation
-	PostOrderingAgentsIDHandler PostOrderingAgentsIDHandler
-	// PostProducingAgentsIDHandler sets the operation handler for the post producing agents ID operation
-	PostProducingAgentsIDHandler PostProducingAgentsIDHandler
+	// TokenomicsCompleteCycleHandler sets the operation handler for the complete cycle operation
+	TokenomicsCompleteCycleHandler tokenomics.CompleteCycleHandler
+	// GetConfigHandler sets the operation handler for the get config operation
+	GetConfigHandler GetConfigHandler
+	// GetOrderingAgentViewHandler sets the operation handler for the get ordering agent view operation
+	GetOrderingAgentViewHandler GetOrderingAgentViewHandler
+	// GetProducingAgentViewHandler sets the operation handler for the get producing agent view operation
+	GetProducingAgentViewHandler GetProducingAgentViewHandler
 	// GetSystemInfoHandler sets the operation handler for the get system info operation
 	GetSystemInfoHandler GetSystemInfoHandler
-	// ListProducersHandler sets the operation handler for the list producers operation
-	ListProducersHandler ListProducersHandler
+	// ListOrderingAgentsHandler sets the operation handler for the list ordering agents operation
+	ListOrderingAgentsHandler ListOrderingAgentsHandler
+	// ListProducingAgentsHandler sets the operation handler for the list producing agents operation
+	ListProducingAgentsHandler ListProducingAgentsHandler
 	// TokenomicsResetSystemHandler sets the operation handler for the reset system operation
 	TokenomicsResetSystemHandler tokenomics.ResetSystemHandler
+	// SendOrderingAgentCommandHandler sets the operation handler for the send ordering agent command operation
+	SendOrderingAgentCommandHandler SendOrderingAgentCommandHandler
+	// SendProducingAgentCommandHandler sets the operation handler for the send producing agent command operation
+	SendProducingAgentCommandHandler SendProducingAgentCommandHandler
+	// TokenomicsStartOrderingHandler sets the operation handler for the start ordering operation
+	TokenomicsStartOrderingHandler tokenomics.StartOrderingHandler
+	// UpdateConfigHandler sets the operation handler for the update config operation
+	UpdateConfigHandler UpdateConfigHandler
 
 	// ServeError is called when an error is received, there is a default handler
 	// but you can set your own with this
@@ -192,26 +217,41 @@ func (o *TokenomicsAPI) Validate() error {
 		unregistered = append(unregistered, "JSONProducer")
 	}
 
-	if o.GetOrderingAgentsIDHandler == nil {
-		unregistered = append(unregistered, "GetOrderingAgentsIDHandler")
+	if o.TokenomicsCompleteCycleHandler == nil {
+		unregistered = append(unregistered, "tokenomics.CompleteCycleHandler")
 	}
-	if o.GetProducingAgentsIDHandler == nil {
-		unregistered = append(unregistered, "GetProducingAgentsIDHandler")
+	if o.GetConfigHandler == nil {
+		unregistered = append(unregistered, "GetConfigHandler")
 	}
-	if o.PostOrderingAgentsIDHandler == nil {
-		unregistered = append(unregistered, "PostOrderingAgentsIDHandler")
+	if o.GetOrderingAgentViewHandler == nil {
+		unregistered = append(unregistered, "GetOrderingAgentViewHandler")
 	}
-	if o.PostProducingAgentsIDHandler == nil {
-		unregistered = append(unregistered, "PostProducingAgentsIDHandler")
+	if o.GetProducingAgentViewHandler == nil {
+		unregistered = append(unregistered, "GetProducingAgentViewHandler")
 	}
 	if o.GetSystemInfoHandler == nil {
 		unregistered = append(unregistered, "GetSystemInfoHandler")
 	}
-	if o.ListProducersHandler == nil {
-		unregistered = append(unregistered, "ListProducersHandler")
+	if o.ListOrderingAgentsHandler == nil {
+		unregistered = append(unregistered, "ListOrderingAgentsHandler")
+	}
+	if o.ListProducingAgentsHandler == nil {
+		unregistered = append(unregistered, "ListProducingAgentsHandler")
 	}
 	if o.TokenomicsResetSystemHandler == nil {
 		unregistered = append(unregistered, "tokenomics.ResetSystemHandler")
+	}
+	if o.SendOrderingAgentCommandHandler == nil {
+		unregistered = append(unregistered, "SendOrderingAgentCommandHandler")
+	}
+	if o.SendProducingAgentCommandHandler == nil {
+		unregistered = append(unregistered, "SendProducingAgentCommandHandler")
+	}
+	if o.TokenomicsStartOrderingHandler == nil {
+		unregistered = append(unregistered, "tokenomics.StartOrderingHandler")
+	}
+	if o.UpdateConfigHandler == nil {
+		unregistered = append(unregistered, "UpdateConfigHandler")
 	}
 
 	if len(unregistered) > 0 {
@@ -301,22 +341,22 @@ func (o *TokenomicsAPI) initHandlerCache() {
 		o.handlers = make(map[string]map[string]http.Handler)
 	}
 
-	if o.handlers["GET"] == nil {
-		o.handlers["GET"] = make(map[string]http.Handler)
-	}
-	o.handlers["GET"]["/ordering-agents/{id}"] = NewGetOrderingAgentsID(o.context, o.GetOrderingAgentsIDHandler)
-	if o.handlers["GET"] == nil {
-		o.handlers["GET"] = make(map[string]http.Handler)
-	}
-	o.handlers["GET"]["/producing-agents/{id}"] = NewGetProducingAgentsID(o.context, o.GetProducingAgentsIDHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
-	o.handlers["POST"]["/ordering-agents/{id}"] = NewPostOrderingAgentsID(o.context, o.PostOrderingAgentsIDHandler)
-	if o.handlers["POST"] == nil {
-		o.handlers["POST"] = make(map[string]http.Handler)
+	o.handlers["POST"]["/system/complete-cycle"] = tokenomics.NewCompleteCycle(o.context, o.TokenomicsCompleteCycleHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["POST"]["/producing-agents/{id}"] = NewPostProducingAgentsID(o.context, o.PostProducingAgentsIDHandler)
+	o.handlers["GET"]["/config"] = NewGetConfig(o.context, o.GetConfigHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/ordering-agents/{id}"] = NewGetOrderingAgentView(o.context, o.GetOrderingAgentViewHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/producing-agents/{id}"] = NewGetProducingAgentView(o.context, o.GetProducingAgentViewHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
@@ -324,11 +364,31 @@ func (o *TokenomicsAPI) initHandlerCache() {
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
-	o.handlers["GET"]["/producer-agents"] = NewListProducers(o.context, o.ListProducersHandler)
+	o.handlers["GET"]["/ordering-agents"] = NewListOrderingAgents(o.context, o.ListOrderingAgentsHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/producer-agents"] = NewListProducingAgents(o.context, o.ListProducingAgentsHandler)
 	if o.handlers["DELETE"] == nil {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
 	o.handlers["DELETE"]["/system"] = tokenomics.NewResetSystem(o.context, o.TokenomicsResetSystemHandler)
+	if o.handlers["POST"] == nil {
+		o.handlers["POST"] = make(map[string]http.Handler)
+	}
+	o.handlers["POST"]["/ordering-agents/{id}"] = NewSendOrderingAgentCommand(o.context, o.SendOrderingAgentCommandHandler)
+	if o.handlers["POST"] == nil {
+		o.handlers["POST"] = make(map[string]http.Handler)
+	}
+	o.handlers["POST"]["/producing-agents/{id}"] = NewSendProducingAgentCommand(o.context, o.SendProducingAgentCommandHandler)
+	if o.handlers["POST"] == nil {
+		o.handlers["POST"] = make(map[string]http.Handler)
+	}
+	o.handlers["POST"]["/system/start-ordering"] = tokenomics.NewStartOrdering(o.context, o.TokenomicsStartOrderingHandler)
+	if o.handlers["PUT"] == nil {
+		o.handlers["PUT"] = make(map[string]http.Handler)
+	}
+	o.handlers["PUT"]["/config"] = NewUpdateConfig(o.context, o.UpdateConfigHandler)
 }
 
 // Serve creates a http handler to serve the API over HTTP

@@ -4,7 +4,7 @@ import "fmt"
 
 type Tokens uint
 type Product uint
-type CapacityType uint
+type CapacityType string
 type Capacity int
 
 func MustGet[K comparable, V any](m map[K]V, k K) V {

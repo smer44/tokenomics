@@ -9,7 +9,11 @@ import (
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
+	"github.com/samber/lo"
 
+	"emulation/application"
+	"emulation/domain"
+	"emulation/models"
 	"emulation/restapi/operations"
 	"emulation/restapi/operations/tokenomics"
 )
@@ -38,41 +42,200 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 
 	api.JSONProducer = runtime.JSONProducer()
 
-	if api.GetOrderingAgentsIDHandler == nil {
-		api.GetOrderingAgentsIDHandler = operations.GetOrderingAgentsIDHandlerFunc(func(params operations.GetOrderingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.GetOrderingAgentsID has not yet been implemented")
+	emulator := application.NewEmulator()
+
+	api.TokenomicsCompleteCycleHandler = tokenomics.CompleteCycleHandlerFunc(func(params tokenomics.CompleteCycleParams) middleware.Responder {
+		result, err := emulator.CompleteCycle()
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return tokenomics.NewCompleteCycleOK().WithPayload(&models.CycleResult{
+			lo.ToPtr(int64(result.Score)),
 		})
-	}
-	if api.GetProducingAgentsIDHandler == nil {
-		api.GetProducingAgentsIDHandler = operations.GetProducingAgentsIDHandlerFunc(func(params operations.GetProducingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.GetProducingAgentsID has not yet been implemented")
+	})
+
+	api.GetOrderingAgentViewHandler = operations.GetOrderingAgentViewHandlerFunc(func(params operations.GetOrderingAgentViewParams) middleware.Responder {
+		result, err := emulator.GetOrderingAgentView(domain.OrderingAgentId(params.ID))
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewGetOrderingAgentViewOK().WithPayload(&models.OrderingAgentView{
+			lo.MapEntries(result.Incoming, func(oid domain.OrderId, val map[domain.CapacityType]domain.Capacity) (string, map[string]int64) {
+				return string(oid), lo.MapEntries(val, func(ct domain.CapacityType, cap domain.Capacity) (string, int64) {
+					return string(ct), int64(cap)
+				})
+			}),
+			lo.MapEntries(result.Producers, func(ct domain.CapacityType, val map[domain.ProducerId]domain.ProducerInfo) (string, map[string]models.ProducingAgentInfo) {
+				return string(ct), lo.MapEntries(val, func(pId domain.ProducerId, pInfo domain.ProducerInfo) (string, models.ProducingAgentInfo) {
+					return string(pId), models.ProducingAgentInfo{
+						int64(pInfo.Capacity),
+						string(pInfo.CapacityType),
+						int64(pInfo.CutOffPrice),
+						string(pInfo.Id),
+						int64(pInfo.MaxCapacity),
+					}
+				})
+			}),
 		})
-	}
-	if api.PostOrderingAgentsIDHandler == nil {
-		api.PostOrderingAgentsIDHandler = operations.PostOrderingAgentsIDHandlerFunc(func(params operations.PostOrderingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.PostOrderingAgentsID has not yet been implemented")
+	})
+
+	api.GetProducingAgentViewHandler = operations.GetProducingAgentViewHandlerFunc(func(params operations.GetProducingAgentViewParams) middleware.Responder {
+		result, err := emulator.GetProducingAgentView(domain.ProducerId(params.ID))
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewGetProducingAgentViewOK().WithPayload(&models.ProducingAgentView{
+			int64(result.Capacity),
+			int64(result.Degradation),
+			string(result.Id),
+			int64(result.MaxCapacity),
+			int64(result.RequestedCapacity),
+			int64(result.Restoration),
+			bool(result.RestorationRunning),
+			int64(result.Upgrade),
+			bool(result.UpgradeRunning),
 		})
-	}
-	if api.PostProducingAgentsIDHandler == nil {
-		api.PostProducingAgentsIDHandler = operations.PostProducingAgentsIDHandlerFunc(func(params operations.PostProducingAgentsIDParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.PostProducingAgentsID has not yet been implemented")
+	})
+
+	api.GetSystemInfoHandler = operations.GetSystemInfoHandlerFunc(func(params operations.GetSystemInfoParams) middleware.Responder {
+		info := emulator.GetSystemInfo()
+		return operations.NewGetSystemInfoOK().WithPayload([]*models.SystemInfo{
+			&info,
 		})
-	}
-	if api.GetSystemInfoHandler == nil {
-		api.GetSystemInfoHandler = operations.GetSystemInfoHandlerFunc(func(params operations.GetSystemInfoParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.GetSystemInfo has not yet been implemented")
+	})
+
+	api.ListOrderingAgentsHandler = operations.ListOrderingAgentsHandlerFunc(func(params operations.ListOrderingAgentsParams) middleware.Responder {
+		orderingAgents := emulator.GetOrderingAgentInfos()
+		result := make([]*models.OrderingAgentInfo, 0, len(orderingAgents))
+		for _, info := range orderingAgents {
+			result = append(result, &models.OrderingAgentInfo{
+				string(info.Id),
+			})
+		}
+		return operations.NewListOrderingAgentsOK().WithPayload(result)
+	})
+
+	api.ListProducingAgentsHandler = operations.ListProducingAgentsHandlerFunc(func(params operations.ListProducingAgentsParams) middleware.Responder {
+		producerInfos := emulator.GetProducerInfos()
+		result := make([]*models.ProducingAgentInfo, 0, len(producerInfos))
+		for _, info := range producerInfos {
+			result = append(result, &models.ProducingAgentInfo{
+				int64(info.Capacity),
+				string(info.CapacityType),
+				int64(info.CutOffPrice),
+				string(info.Id),
+				int64(info.MaxCapacity),
+			})
+		}
+		return operations.NewListProducingAgentsOK().WithPayload(result)
+	})
+
+	api.TokenomicsResetSystemHandler = tokenomics.ResetSystemHandlerFunc(func(params tokenomics.ResetSystemParams) middleware.Responder {
+		emulator.Reset()
+		return tokenomics.NewResetSystemOK()
+	})
+
+	api.SendOrderingAgentCommandHandler = operations.SendOrderingAgentCommandHandlerFunc(func(params operations.SendOrderingAgentCommandParams) middleware.Responder {
+		err := emulator.OrderingAgentAction(domain.OrderingAgentId(params.ID), domain.OrderingAgentCommand{
+			lo.MapEntries(params.Body.Orders, func(orderId string, producers map[string]int64) (domain.OrderId, map[domain.ProducerId]domain.Tokens) {
+				return domain.OrderId(orderId), lo.MapEntries(producers, func(producerId string, tokens int64) (domain.ProducerId, domain.Tokens) {
+					return domain.ProducerId(producerId), domain.Tokens(tokens)
+				})
+			}),
 		})
-	}
-	if api.ListProducersHandler == nil {
-		api.ListProducersHandler = operations.ListProducersHandlerFunc(func(params operations.ListProducersParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.ListProducers has not yet been implemented")
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewSendOrderingAgentCommandOK()
+	})
+
+	api.SendProducingAgentCommandHandler = operations.SendProducingAgentCommandHandlerFunc(func(params operations.SendProducingAgentCommandParams) middleware.Responder {
+		err := emulator.ProducingAgentAction(domain.ProducerId(params.ID), domain.ProducingAgentCommand{
+			params.Body.DoRestoration,
+			params.Body.DoUpgrade,
 		})
-	}
-	if api.TokenomicsResetSystemHandler == nil {
-		api.TokenomicsResetSystemHandler = tokenomics.ResetSystemHandlerFunc(func(params tokenomics.ResetSystemParams) middleware.Responder {
-			return middleware.NotImplemented("operation tokenomics.ResetSystem has not yet been implemented")
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return operations.NewSendProducingAgentCommandOK()
+	})
+
+	api.TokenomicsStartOrderingHandler = tokenomics.StartOrderingHandlerFunc(func(params tokenomics.StartOrderingParams) middleware.Responder {
+		err := emulator.StartOrdering()
+		if err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+		return tokenomics.NewStartOrderingOK()
+	})
+
+	api.GetConfigHandler = operations.GetConfigHandlerFunc(func(params operations.GetConfigParams) middleware.Responder {
+		config := emulator.GetConfig()
+		if config == nil {
+			return middleware.Error(http.StatusNotFound, "configuration not found")
+		}
+
+		return operations.NewGetConfigOK().WithPayload(&models.Configuration{
+			CycleEmission: lo.ToPtr(int64(config.CycleEmission)),
+			ProcessSheets: lo.Map(config.ProcessSheets, func(ps domain.ProcessSheet, _ int) *models.ProcessSheet {
+				return &models.ProcessSheet{
+					Product: lo.ToPtr(int64(ps.Product)),
+					Require: lo.MapEntries(ps.Require, func(ct domain.CapacityType, cap domain.Capacity) (string, int64) {
+						return string(ct), int64(cap)
+					}),
+				}
+			}),
+			ProducerConfigs: lo.Map(config.ProducerConfigs, func(pc domain.ProducingAgentConfig, _ int) *models.ProducingAgentConfig {
+				return &models.ProducingAgentConfig{
+					ID:          lo.ToPtr(string(pc.Id)),
+					Type:        lo.ToPtr(string(pc.Type)),
+					Capacity:    lo.ToPtr(int64(pc.Capacity)),
+					Degradation: lo.ToPtr(int64(pc.Degradation)),
+					Restoration: struct{}{},
+					Upgrade: &models.Upgrade{
+						Product:  int64(pc.Upgrade.Require),
+						Capacity: int64(pc.Upgrade.Increases),
+					},
+				}
+			}),
 		})
-	}
+	})
+
+	api.UpdateConfigHandler = operations.UpdateConfigHandlerFunc(func(params operations.UpdateConfigParams) middleware.Responder {
+		config := &domain.Configuration{
+			CycleEmission: domain.Tokens(lo.FromPtr(params.Body.CycleEmission)),
+			ProcessSheets: lo.Map(params.Body.ProcessSheets, func(ps *models.ProcessSheet, _ int) domain.ProcessSheet {
+				return domain.ProcessSheet{
+					Product: domain.Product(lo.FromPtr(ps.Product)),
+					Require: lo.MapEntries(ps.Require, func(ct string, cap int64) (domain.CapacityType, domain.Capacity) {
+						return domain.CapacityType(ct), domain.Capacity(cap)
+					}),
+				}
+			}),
+			ProducerConfigs: lo.Map(params.Body.ProducerConfigs, func(pc *models.ProducingAgentConfig, _ int) domain.ProducingAgentConfig {
+				return domain.ProducingAgentConfig{
+					Id:          domain.ProducerId(lo.FromPtr(pc.ID)),
+					Type:        domain.CapacityType(lo.FromPtr(pc.Type)),
+					Capacity:    domain.Capacity(lo.FromPtr(pc.Capacity)),
+					Degradation: domain.DegradationRate(lo.FromPtr(pc.Degradation)),
+					Restoration: domain.Restoration{},
+					Upgrade: domain.Upgrade{
+						Require:   domain.Product(pc.Upgrade.Product),
+						Increases: domain.Capacity(pc.Upgrade.Capacity),
+					},
+				}
+			}),
+		}
+
+		if err := config.Validate(); err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+
+		if err := emulator.UpdateConfig(config); err != nil {
+			return middleware.Error(http.StatusBadRequest, err.Error())
+		}
+
+		return operations.NewUpdateConfigOK()
+	})
 
 	api.PreServerShutdown = func() {}
 

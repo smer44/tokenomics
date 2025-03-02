@@ -21,11 +21,11 @@ import (
 type SystemInfo struct {
 
 	// cycle counter
-	CycleCounter int64 `json:"CycleCounter,omitempty"`
+	CycleCounter int64 `json:"cycleCounter,omitempty"`
 
 	// state
 	// Enum: ["OrdersPlacement","Ordering"]
-	State string `json:"State,omitempty"`
+	State string `json:"state,omitempty"`
 }
 
 // Validate validates this system info
@@ -77,7 +77,7 @@ func (m *SystemInfo) validateState(formats strfmt.Registry) error {
 	}
 
 	// value enum
-	if err := m.validateStateEnum("State", "body", m.State); err != nil {
+	if err := m.validateStateEnum("state", "body", m.State); err != nil {
 		return err
 	}
 

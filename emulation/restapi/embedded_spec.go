@@ -32,13 +32,67 @@ func init() {
     "title": "tokenomics",
     "version": "1.0.0"
   },
-  "host": "localhost:9090",
+  "host": "localhost:8080",
   "basePath": "/",
   "paths": {
+    "/config": {
+      "get": {
+        "summary": "Get current system configuration",
+        "operationId": "getConfig",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update system configuration",
+        "operationId": "updateConfig",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration updated successfully"
+          },
+          "400": {
+            "description": "Invalid configuration"
+          }
+        }
+      }
+    },
+    "/ordering-agents": {
+      "get": {
+        "summary": "Get ordering agents list",
+        "operationId": "listOrderingAgents",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OrderingAgentInfo"
+              }
+            }
+          }
+        }
+      }
+    },
     "/ordering-agents/{id}": {
       "get": {
         "description": "Retrieve the view of an ordering agent.",
         "summary": "Get Ordering Agent View",
+        "operationId": "getOrderingAgentView",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -51,6 +105,7 @@ func init() {
       "post": {
         "description": "Send a command to an ordering agent.",
         "summary": "Submit Ordering Agent Command",
+        "operationId": "sendOrderingAgentCommand",
         "parameters": [
           {
             "name": "body",
@@ -78,15 +133,15 @@ func init() {
     },
     "/producer-agents": {
       "get": {
-        "summary": "Get producer agens list",
-        "operationId": "list producers",
+        "summary": "Get producing agents list",
+        "operationId": "listProducingAgents",
         "responses": {
           "200": {
             "description": "OK",
             "schema": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/ProducerInfo"
+                "$ref": "#/definitions/ProducingAgentInfo"
               }
             }
           }
@@ -97,6 +152,7 @@ func init() {
       "get": {
         "description": "Retrieve the view of a producing agent.",
         "summary": "Get Producing Agent View",
+        "operationId": "getProducingAgentView",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -109,6 +165,7 @@ func init() {
       "post": {
         "description": "Send a command to a producing agent.",
         "summary": "Submit Producing Agent Command",
+        "operationId": "sendProducingAgentCommand",
         "parameters": [
           {
             "name": "body",
@@ -162,14 +219,82 @@ func init() {
           }
         }
       }
+    },
+    "/system/complete-cycle": {
+      "post": {
+        "tags": [
+          "Tokenomics"
+        ],
+        "summary": "Complete current cycle",
+        "operationId": "completeCycle",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/CycleResult"
+            }
+          }
+        }
+      }
+    },
+    "/system/start-ordering": {
+      "post": {
+        "tags": [
+          "Tokenomics"
+        ],
+        "summary": "Complete investment phase",
+        "operationId": "startOrdering",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "definitions": {
+    "Configuration": {
+      "type": "object",
+      "required": [
+        "cycleEmission",
+        "processSheets",
+        "producerConfigs"
+      ],
+      "properties": {
+        "cycleEmission": {
+          "description": "Amount of tokens emitted each cycle",
+          "type": "integer"
+        },
+        "processSheets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProcessSheet"
+          }
+        },
+        "producerConfigs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProducingAgentConfig"
+          }
+        }
+      }
+    },
+    "CycleResult": {
+      "type": "object",
+      "required": [
+        "score"
+      ],
+      "properties": {
+        "score": {
+          "type": "integer"
+        }
+      }
+    },
     "OrderingAgentCommand": {
       "description": "Ordering agent command",
       "type": "object",
       "properties": {
-        "Orders": {
+        "orders": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
@@ -192,11 +317,20 @@ func init() {
         }
       }
     },
+    "OrderingAgentInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Agent ID",
+          "type": "string"
+        }
+      }
+    },
     "OrderingAgentView": {
       "description": "Ordering agent view",
       "type": "object",
       "properties": {
-        "Incoming": {
+        "incoming": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
@@ -205,12 +339,12 @@ func init() {
             }
           }
         },
-        "Producers": {
+        "producers": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
             "additionalProperties": {
-              "$ref": "#/definitions/ProducerInfo"
+              "$ref": "#/definitions/ProducingAgentInfo"
             }
           }
         }
@@ -242,97 +376,166 @@ func init() {
         }
       }
     },
-    "ProducerInfo": {
+    "ProcessSheet": {
       "type": "object",
+      "required": [
+        "product",
+        "require"
+      ],
       "properties": {
-        "Capacity": {
-          "description": "Current capacity value",
+        "product": {
+          "description": "Product identifier",
           "type": "integer"
         },
-        "CapacityType": {
-          "description": "Capacity type",
-          "type": "integer"
-        },
-        "CutOffPrice": {
-          "description": "The cut off price in the previous cycle",
-          "type": "integer"
-        },
-        "Id": {
-          "description": "Producer agent ID",
-          "type": "string"
-        },
-        "MaxCapacity": {
-          "description": "Maximum capacity value",
-          "type": "integer"
+        "require": {
+          "description": "Map of capacity type to required capacity",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
         }
       }
     },
     "ProducingAgentCommand": {
       "type": "object",
       "properties": {
-        "DoRestoration": {
+        "doRestoration": {
           "description": "Pass true for purchasing of Restoration (Not allowed if Restoration is producing)",
           "type": "boolean"
         },
-        "DoUpgrade": {
+        "doUpgrade": {
           "description": "Pass true for purchasing of Upgrade (Not allowed if Upgrade is producing)",
           "type": "boolean"
+        }
+      }
+    },
+    "ProducingAgentConfig": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "capacity",
+        "degradation"
+      ],
+      "properties": {
+        "capacity": {
+          "description": "Initial capacity",
+          "type": "integer"
+        },
+        "degradation": {
+          "description": "Degradation rate",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Producer identifier",
+          "type": "string"
+        },
+        "restoration": {
+          "$ref": "#/definitions/Restoration"
+        },
+        "type": {
+          "description": "Capacity type",
+          "type": "string"
+        },
+        "upgrade": {
+          "$ref": "#/definitions/Upgrade"
+        }
+      }
+    },
+    "ProducingAgentInfo": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "description": "Current capacity value",
+          "type": "integer"
+        },
+        "capacityType": {
+          "description": "Capacity type",
+          "type": "string"
+        },
+        "cutOffPrice": {
+          "description": "The cut off price in the previous cycle",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Agent ID",
+          "type": "string"
+        },
+        "maxCapacity": {
+          "description": "Maximum capacity value",
+          "type": "integer"
         }
       }
     },
     "ProducingAgentView": {
       "type": "object",
       "properties": {
-        "Capacity": {
+        "capacity": {
           "description": "Current capacity. Degradates each turn. Could be increased to MaxCapacity with Restoration purchase",
           "type": "integer"
         },
-        "Degradation": {
+        "degradation": {
           "description": "Capacity decrease in the current cycle",
           "type": "integer"
         },
-        "Id": {
+        "id": {
           "description": "Agent ID",
           "type": "string"
         },
-        "MaxCapacity": {
+        "maxCapacity": {
           "description": "Maximum capacity. Can be increased with Upgrade purchase",
           "type": "integer"
         },
-        "RequestedCapacity": {
+        "requestedCapacity": {
           "description": "Total capacity was requested in the previous cycle",
           "type": "integer"
         },
-        "Restoration": {
+        "restoration": {
           "description": "Capacity gain with Restoration",
           "type": "integer"
         },
-        "RestorationRunning": {
+        "restorationRunning": {
           "description": "Indicates Restoration production is running",
           "type": "boolean"
         },
-        "Upgrade": {
+        "upgrade": {
           "description": "MaxCapacity and Capacity gain with Upgrade",
           "type": "integer"
         },
-        "UpgradeRunning": {
+        "upgradeRunning": {
           "description": "Indicates Upgrade production is running",
           "type": "boolean"
         }
       }
     },
+    "Restoration": {
+      "type": "object"
+    },
     "SystemInfo": {
       "type": "object",
       "properties": {
-        "CycleCounter": {
+        "cycleCounter": {
           "type": "integer"
         },
-        "State": {
+        "state": {
           "type": "string",
           "enum": [
             "OrdersPlacement",
             "Ordering"
           ]
+        }
+      }
+    },
+    "Upgrade": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "description": "Capacity increase after upgrade",
+          "type": "integer"
+        },
+        "product": {
+          "description": "Product required for upgrade",
+          "type": "integer"
         }
       }
     }
@@ -353,13 +556,67 @@ func init() {
     "title": "tokenomics",
     "version": "1.0.0"
   },
-  "host": "localhost:9090",
+  "host": "localhost:8080",
   "basePath": "/",
   "paths": {
+    "/config": {
+      "get": {
+        "summary": "Get current system configuration",
+        "operationId": "getConfig",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update system configuration",
+        "operationId": "updateConfig",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Configuration"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration updated successfully"
+          },
+          "400": {
+            "description": "Invalid configuration"
+          }
+        }
+      }
+    },
+    "/ordering-agents": {
+      "get": {
+        "summary": "Get ordering agents list",
+        "operationId": "listOrderingAgents",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OrderingAgentInfo"
+              }
+            }
+          }
+        }
+      }
+    },
     "/ordering-agents/{id}": {
       "get": {
         "description": "Retrieve the view of an ordering agent.",
         "summary": "Get Ordering Agent View",
+        "operationId": "getOrderingAgentView",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -372,6 +629,7 @@ func init() {
       "post": {
         "description": "Send a command to an ordering agent.",
         "summary": "Submit Ordering Agent Command",
+        "operationId": "sendOrderingAgentCommand",
         "parameters": [
           {
             "name": "body",
@@ -399,15 +657,15 @@ func init() {
     },
     "/producer-agents": {
       "get": {
-        "summary": "Get producer agens list",
-        "operationId": "list producers",
+        "summary": "Get producing agents list",
+        "operationId": "listProducingAgents",
         "responses": {
           "200": {
             "description": "OK",
             "schema": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/ProducerInfo"
+                "$ref": "#/definitions/ProducingAgentInfo"
               }
             }
           }
@@ -418,6 +676,7 @@ func init() {
       "get": {
         "description": "Retrieve the view of a producing agent.",
         "summary": "Get Producing Agent View",
+        "operationId": "getProducingAgentView",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -430,6 +689,7 @@ func init() {
       "post": {
         "description": "Send a command to a producing agent.",
         "summary": "Submit Producing Agent Command",
+        "operationId": "sendProducingAgentCommand",
         "parameters": [
           {
             "name": "body",
@@ -483,14 +743,82 @@ func init() {
           }
         }
       }
+    },
+    "/system/complete-cycle": {
+      "post": {
+        "tags": [
+          "Tokenomics"
+        ],
+        "summary": "Complete current cycle",
+        "operationId": "completeCycle",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/CycleResult"
+            }
+          }
+        }
+      }
+    },
+    "/system/start-ordering": {
+      "post": {
+        "tags": [
+          "Tokenomics"
+        ],
+        "summary": "Complete investment phase",
+        "operationId": "startOrdering",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "definitions": {
+    "Configuration": {
+      "type": "object",
+      "required": [
+        "cycleEmission",
+        "processSheets",
+        "producerConfigs"
+      ],
+      "properties": {
+        "cycleEmission": {
+          "description": "Amount of tokens emitted each cycle",
+          "type": "integer"
+        },
+        "processSheets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProcessSheet"
+          }
+        },
+        "producerConfigs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProducingAgentConfig"
+          }
+        }
+      }
+    },
+    "CycleResult": {
+      "type": "object",
+      "required": [
+        "score"
+      ],
+      "properties": {
+        "score": {
+          "type": "integer"
+        }
+      }
+    },
     "OrderingAgentCommand": {
       "description": "Ordering agent command",
       "type": "object",
       "properties": {
-        "Orders": {
+        "orders": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
@@ -513,11 +841,20 @@ func init() {
         }
       }
     },
+    "OrderingAgentInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Agent ID",
+          "type": "string"
+        }
+      }
+    },
     "OrderingAgentView": {
       "description": "Ordering agent view",
       "type": "object",
       "properties": {
-        "Incoming": {
+        "incoming": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
@@ -526,12 +863,12 @@ func init() {
             }
           }
         },
-        "Producers": {
+        "producers": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
             "additionalProperties": {
-              "$ref": "#/definitions/ProducerInfo"
+              "$ref": "#/definitions/ProducingAgentInfo"
             }
           }
         }
@@ -563,97 +900,166 @@ func init() {
         }
       }
     },
-    "ProducerInfo": {
+    "ProcessSheet": {
       "type": "object",
+      "required": [
+        "product",
+        "require"
+      ],
       "properties": {
-        "Capacity": {
-          "description": "Current capacity value",
+        "product": {
+          "description": "Product identifier",
           "type": "integer"
         },
-        "CapacityType": {
-          "description": "Capacity type",
-          "type": "integer"
-        },
-        "CutOffPrice": {
-          "description": "The cut off price in the previous cycle",
-          "type": "integer"
-        },
-        "Id": {
-          "description": "Producer agent ID",
-          "type": "string"
-        },
-        "MaxCapacity": {
-          "description": "Maximum capacity value",
-          "type": "integer"
+        "require": {
+          "description": "Map of capacity type to required capacity",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
         }
       }
     },
     "ProducingAgentCommand": {
       "type": "object",
       "properties": {
-        "DoRestoration": {
+        "doRestoration": {
           "description": "Pass true for purchasing of Restoration (Not allowed if Restoration is producing)",
           "type": "boolean"
         },
-        "DoUpgrade": {
+        "doUpgrade": {
           "description": "Pass true for purchasing of Upgrade (Not allowed if Upgrade is producing)",
           "type": "boolean"
+        }
+      }
+    },
+    "ProducingAgentConfig": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "capacity",
+        "degradation"
+      ],
+      "properties": {
+        "capacity": {
+          "description": "Initial capacity",
+          "type": "integer"
+        },
+        "degradation": {
+          "description": "Degradation rate",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Producer identifier",
+          "type": "string"
+        },
+        "restoration": {
+          "$ref": "#/definitions/Restoration"
+        },
+        "type": {
+          "description": "Capacity type",
+          "type": "string"
+        },
+        "upgrade": {
+          "$ref": "#/definitions/Upgrade"
+        }
+      }
+    },
+    "ProducingAgentInfo": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "description": "Current capacity value",
+          "type": "integer"
+        },
+        "capacityType": {
+          "description": "Capacity type",
+          "type": "string"
+        },
+        "cutOffPrice": {
+          "description": "The cut off price in the previous cycle",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Agent ID",
+          "type": "string"
+        },
+        "maxCapacity": {
+          "description": "Maximum capacity value",
+          "type": "integer"
         }
       }
     },
     "ProducingAgentView": {
       "type": "object",
       "properties": {
-        "Capacity": {
+        "capacity": {
           "description": "Current capacity. Degradates each turn. Could be increased to MaxCapacity with Restoration purchase",
           "type": "integer"
         },
-        "Degradation": {
+        "degradation": {
           "description": "Capacity decrease in the current cycle",
           "type": "integer"
         },
-        "Id": {
+        "id": {
           "description": "Agent ID",
           "type": "string"
         },
-        "MaxCapacity": {
+        "maxCapacity": {
           "description": "Maximum capacity. Can be increased with Upgrade purchase",
           "type": "integer"
         },
-        "RequestedCapacity": {
+        "requestedCapacity": {
           "description": "Total capacity was requested in the previous cycle",
           "type": "integer"
         },
-        "Restoration": {
+        "restoration": {
           "description": "Capacity gain with Restoration",
           "type": "integer"
         },
-        "RestorationRunning": {
+        "restorationRunning": {
           "description": "Indicates Restoration production is running",
           "type": "boolean"
         },
-        "Upgrade": {
+        "upgrade": {
           "description": "MaxCapacity and Capacity gain with Upgrade",
           "type": "integer"
         },
-        "UpgradeRunning": {
+        "upgradeRunning": {
           "description": "Indicates Upgrade production is running",
           "type": "boolean"
         }
       }
     },
+    "Restoration": {
+      "type": "object"
+    },
     "SystemInfo": {
       "type": "object",
       "properties": {
-        "CycleCounter": {
+        "cycleCounter": {
           "type": "integer"
         },
-        "State": {
+        "state": {
           "type": "string",
           "enum": [
             "OrdersPlacement",
             "Ordering"
           ]
+        }
+      }
+    },
+    "Upgrade": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "description": "Capacity increase after upgrade",
+          "type": "integer"
+        },
+        "product": {
+          "description": "Product required for upgrade",
+          "type": "integer"
         }
       }
     }

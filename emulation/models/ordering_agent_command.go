@@ -19,7 +19,7 @@ import (
 type OrderingAgentCommand struct {
 
 	// orders
-	Orders map[string]map[string]int64 `json:"Orders,omitempty"`
+	Orders map[string]map[string]int64 `json:"orders,omitempty"`
 }
 
 // Validate validates this ordering agent command
