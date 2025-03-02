@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"slices"
 
@@ -125,6 +126,12 @@ func (p *ProducingAgent) PlaceBids(bids []Bid) {
 		if bids[i].CapacityType != p.capacityType {
 			panic("wrong capacity type")
 		}
+		logEvent("producer.bid.placed",
+			withProducerId(p.id),
+			withOrderId(bids[i].OrderId),
+			withCapacityType(bids[i].CapacityType),
+			withCapacity(bids[i].Capacity),
+			withTokens(bids[i].Tokens))
 	}
 	p.producerState.bids = append(p.producerState.bids, bids...)
 }
@@ -166,10 +173,18 @@ func (p *ProducingAgent) HandleCmd(cmd ProducingAgentCommand) ([]InvestmentReque
 	}
 	requests := []InvestmentRequest{}
 	if cmd.DoUpgrade {
+		logEvent("producer.upgrade.requested",
+			withProducerId(p.id),
+			withProduct(p.upgrade.Require),
+			withCapacity(p.upgrade.Increases))
 		requests = append(requests, InvestmentRequest{p.id, InvestmentTypeUpgrade, p.upgrade.Require, p.producerState.cutOffPrice})
 		p.consumerState.upgradeRunning = true
 	}
 	if cmd.DoRestoration {
+		logEvent("producer.restoration.requested",
+			withProducerId(p.id),
+			withProduct(p.restoration.Require),
+			withCapacity(p.restoration.Restores))
 		requests = append(requests, InvestmentRequest{p.id, InvestmentTypeRestoration, p.restoration.Require, p.producerState.cutOffPrice})
 		p.consumerState.restorationRunning = true
 	}
@@ -190,15 +205,27 @@ func (p *ProducingAgent) InvesetmentCompleted(request *InvestmentRequest) {
 			panic(ErrNoRestorationRunning)
 		}
 		p.consumerState.restorationRunning = false
+		oldCapacity := p.producerState.capacity
 		p.producerState.capacity = min(p.producerState.maxCapacity, p.producerState.capacity+p.restoration.Restores)
+		logEvent("producer.restoration.completed",
+			withProducerId(p.id),
+			withCapacity(oldCapacity),
+			withCapacity(p.producerState.capacity))
 	case InvestmentTypeUpgrade:
 		if !p.consumerState.upgradeRunning {
 			panic(ErrNoUpgradesRunning)
 		}
 		p.consumerState.upgradeRunning = false
+		oldMaxCapacity := p.producerState.maxCapacity
+		oldCapacity := p.producerState.capacity
 		p.producerState.maxCapacity += p.upgrade.Increases
 		p.producerState.capacity += p.upgrade.Increases
-
+		logEvent("producer.upgrade.completed",
+			withProducerId(p.id),
+			withCapacity(oldMaxCapacity),
+			withCapacity(p.producerState.maxCapacity),
+			withCapacity(oldCapacity),
+			withCapacity(p.producerState.capacity))
 	default:
 		panic(errors.ErrUnsupported)
 	}
@@ -214,11 +241,15 @@ func (p *ProducingAgent) InvesetmentRejected(request *InvestmentRequest) {
 			panic(ErrNoRestorationRunning)
 		}
 		p.consumerState.restorationRunning = false
+		logEvent("producer.restoration.rejected",
+			withProducerId(p.id))
 	case InvestmentTypeUpgrade:
 		if !p.consumerState.upgradeRunning {
 			panic(ErrNoUpgradesRunning)
 		}
 		p.consumerState.upgradeRunning = false
+		logEvent("producer.upgrade.rejected",
+			withProducerId(p.id))
 	default:
 		panic(errors.ErrUnsupported)
 	}
@@ -240,6 +271,12 @@ func (p *ProducingAgent) Produce() ProductionResult {
 	rejected := []Bid{}
 	processing := []Bid{}
 	capacity := max(0, p.producerState.capacity-p.capacityDegradation())
+
+	logEvent("producer.production.started",
+		withProducerId(p.id),
+		withCapacity(p.producerState.capacity),
+		withCapacity(capacity),
+		withCapacity(requestedCapacity))
 
 	cutOffPrice := p.producerState.cutOffPrice
 	funds := Tokens(0)
@@ -272,6 +309,16 @@ func (p *ProducingAgent) Produce() ProductionResult {
 	if inProgress != nil {
 		processing = append(processing, inProgress.bid)
 	}
+
+	logEvent("producer.production.completed",
+		withProducerId(p.id),
+		withCapacity(capacity),
+		withTokens(funds),
+		withCutOffPrice(cutOffPrice),
+		slog.Int("completed", len(completed)),
+		slog.Int("rejected", len(rejected)),
+		slog.Int("processing", len(processing)))
+
 	p.cmdHandled = false
 	return ProductionResult{processing, completed, rejected}
 }

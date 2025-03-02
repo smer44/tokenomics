@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/samber/lo"
 )
@@ -38,6 +39,9 @@ func (oa *OrderingAgent) PlaceOrder(orderInfo OrderInfo) {
 		return
 	}
 	oa.incoming[orderInfo.Id] = orderInfo
+	logEvent("ordering.order.placed",
+		withOrderId(orderInfo.Id),
+		withTokens(orderInfo.Tokens))
 }
 
 func (oa *OrderingAgent) View(producers map[ProducerId]ProducerInfo) OrderingAgentView {
@@ -67,6 +71,9 @@ func (oa *OrderingAgent) View(producers map[ProducerId]ProducerInfo) OrderingAge
 }
 
 func (oa *OrderingAgent) CompleteCycle() {
+	logEvent("ordering.cycle.completed",
+		slog.String("agentId", string(oa.id)),
+		slog.Int("orders", len(oa.incoming)))
 	oa.incoming, oa.cmdHandled = map[OrderId]OrderInfo{}, true
 }
 
@@ -77,6 +84,11 @@ func (oa *OrderingAgent) HandleCmd(cmd OrderingAgentCommand, producers map[Produ
 	if len(cmd.Orders) != len(oa.incoming) {
 		return nil, fmt.Errorf("too few orders passed. Incoming [%d] passed [%d]", len(oa.incoming), len(cmd.Orders))
 	}
+
+	logEvent("ordering.command.received",
+		slog.String("agentId", string(oa.id)),
+		slog.Int("orders", len(cmd.Orders)))
+
 	result := map[ProducerId][]Bid{}
 	for orderId, bids := range cmd.Orders {
 		order, ok := oa.incoming[orderId]
@@ -97,6 +109,13 @@ func (oa *OrderingAgent) HandleCmd(cmd OrderingAgentCommand, producers map[Produ
 				return nil, fmt.Errorf("order [%s] doesn't contain capacity type for producer [%s] with capacity type [%s]", orderId, producerId, capType)
 			}
 			result[producerId] = append(result[producerId], Bid{capType, required, tokens, orderId})
+			logEvent("ordering.bid.created",
+				slog.String("agentId", string(oa.id)),
+				withOrderId(orderId),
+				withProducerId(producerId),
+				withCapacityType(capType),
+				withCapacity(required),
+				withTokens(tokens))
 		}
 	}
 	oa.cmdHandled = true

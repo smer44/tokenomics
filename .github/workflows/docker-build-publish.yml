@@ -4,8 +4,12 @@ on:
   push:
     branches:
       - "**"
+    paths:
+      - "emulation/**"
   pull_request:
     branches: [main]
+    paths:
+      - "emulation/**"
 
 env:
   REGISTRY: ghcr.io

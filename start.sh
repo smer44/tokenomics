@@ -9,6 +9,9 @@ PORT=8080
 # Default branch is the current git branch, fallback to main if not in a git repo
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 
+# Default to attached mode
+DETACH=false
+
 # Help message
 show_help() {
     echo "Usage: ./start.sh [OPTIONS]"
@@ -18,6 +21,7 @@ show_help() {
     echo "  -p, --port PORT    Specify the port to expose (default: 8080)"
     echo "  -t, --tag TAG      Specify the Docker image tag (default: latest-<current-branch>)"
     echo "  -b, --branch NAME  Specify the branch to use (default: current git branch or main)"
+    echo "  -d, --detach       Run container in background (detached mode)"
     echo "  -h, --help         Show this help message"
 }
 
@@ -35,6 +39,10 @@ while [[ $# -gt 0 ]]; do
         -b|--branch)
             BRANCH="$2"
             shift 2
+            ;;
+        -d|--detach)
+            DETACH=true
+            shift
             ;;
         -h|--help)
             show_help
@@ -58,9 +66,15 @@ TAG=$(echo "$TAG" | sed 's/[^a-zA-Z0-9]/-/g')
 echo "Pulling image ${IMAGE_NAME}:${TAG}..."
 docker pull "${IMAGE_NAME}:${TAG}"
 
+# Prepare docker run command
+DOCKER_CMD="docker run"
+if [ "$DETACH" = true ]; then
+    DOCKER_CMD="$DOCKER_CMD -d"
+fi
+
 # Run the container
 echo "Starting container on port ${PORT}..."
-docker run -d \
+$DOCKER_CMD \
     --name tokenomics \
     -p "${PORT}:8080" \
     --restart unless-stopped \
