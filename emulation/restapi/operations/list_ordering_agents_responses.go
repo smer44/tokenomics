@@ -26,7 +26,7 @@ type ListOrderingAgentsOK struct {
 	/*
 	  In: Body
 	*/
-	Payload []*models.ProducingAgentInfo `json:"body,omitempty"`
+	Payload []*models.OrderingAgentInfo `json:"body,omitempty"`
 }
 
 // NewListOrderingAgentsOK creates ListOrderingAgentsOK with default headers values
@@ -36,13 +36,13 @@ func NewListOrderingAgentsOK() *ListOrderingAgentsOK {
 }
 
 // WithPayload adds the payload to the list ordering agents o k response
-func (o *ListOrderingAgentsOK) WithPayload(payload []*models.ProducingAgentInfo) *ListOrderingAgentsOK {
+func (o *ListOrderingAgentsOK) WithPayload(payload []*models.OrderingAgentInfo) *ListOrderingAgentsOK {
 	o.Payload = payload
 	return o
 }
 
 // SetPayload sets the payload to the list ordering agents o k response
-func (o *ListOrderingAgentsOK) SetPayload(payload []*models.ProducingAgentInfo) {
+func (o *ListOrderingAgentsOK) SetPayload(payload []*models.OrderingAgentInfo) {
 	o.Payload = payload
 }
 
@@ -53,7 +53,7 @@ func (o *ListOrderingAgentsOK) WriteResponse(rw http.ResponseWriter, producer ru
 	payload := o.Payload
 	if payload == nil {
 		// return empty array
-		payload = make([]*models.ProducingAgentInfo, 0, 50)
+		payload = make([]*models.OrderingAgentInfo, 0, 50)
 	}
 
 	if err := producer.Produce(rw, payload); err != nil {

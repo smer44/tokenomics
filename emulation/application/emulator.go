@@ -2,6 +2,7 @@ package application
 
 import (
 	"emulation/domain"
+	"emulation/models"
 	"strconv"
 	"sync"
 )
@@ -27,8 +28,8 @@ func NewEmulator() *Emulator {
 }
 
 func (e *Emulator) Reset() {
-	cpt1 := domain.CapacityType(1)
-	cpt2 := domain.CapacityType(2)
+	cpt1 := domain.CapacityType("capacity-1")
+	cpt2 := domain.CapacityType("capacity-2")
 	consumerProduct := domain.Product(1)
 	investmentProduct := domain.Product(2)
 	sheets := []domain.ProcessSheet{
@@ -81,4 +82,30 @@ func (e *Emulator) CompleteCycle() (domain.CycleResult, error) {
 	e.rwMu.Lock()
 	defer e.rwMu.Unlock()
 	return e.system.CompleteCycle()
+}
+
+func (e *Emulator) GetProducerInfos() map[domain.ProducerId]domain.ProducerInfo {
+	e.rwMu.RLock()
+	defer e.rwMu.RUnlock()
+	return e.system.GetProducerInfos()
+}
+
+func (e *Emulator) GetOrderingAgentInfos() map[domain.OrderingAgentId]domain.OrderingAgentInfo {
+	e.rwMu.RLock()
+	defer e.rwMu.RUnlock()
+	return e.system.GetOrderingAgentInfos()
+}
+
+func (e *Emulator) GetSystemInfo() models.SystemInfo {
+	e.rwMu.RLock()
+	defer e.rwMu.RUnlock()
+	info := e.system.GetSystemInfo()
+	state := "OrdersPlacement"
+	if info.State == domain.SystemStateOrdering {
+		state = "Ordering"
+	}
+	return models.SystemInfo{
+		State:        state,
+		CycleCounter: int64(info.CycleCounter),
+	}
 }

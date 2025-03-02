@@ -32,7 +32,7 @@ func NewListOrderingAgents(ctx *middleware.Context, handler ListOrderingAgentsHa
 /*
 	ListOrderingAgents swagger:route GET /ordering-agents listOrderingAgents
 
-Get producer agens list
+Get ordering agents list
 */
 type ListOrderingAgents struct {
 	Context *middleware.Context

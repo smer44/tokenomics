@@ -37,7 +37,7 @@ func init() {
   "paths": {
     "/ordering-agents": {
       "get": {
-        "summary": "Get producer agens list",
+        "summary": "Get ordering agents list",
         "operationId": "listOrderingAgents",
         "responses": {
           "200": {
@@ -45,7 +45,7 @@ func init() {
             "schema": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/ProducingAgentInfo"
+                "$ref": "#/definitions/OrderingAgentInfo"
               }
             }
           }
@@ -430,7 +430,7 @@ func init() {
   "paths": {
     "/ordering-agents": {
       "get": {
-        "summary": "Get producer agens list",
+        "summary": "Get ordering agents list",
         "operationId": "listOrderingAgents",
         "responses": {
           "200": {
@@ -438,7 +438,7 @@ func init() {
             "schema": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/ProducingAgentInfo"
+                "$ref": "#/definitions/OrderingAgentInfo"
               }
             }
           }

@@ -19,6 +19,15 @@ const (
 
 type OrderingAgentId string
 
+type SystemInfo struct {
+	State        SystemState
+	CycleCounter uint
+}
+
+type OrderingAgentInfo struct {
+	Id OrderingAgentId
+}
+
 func FromProducerId(id ProducerId) OrderingAgentId {
 	return OrderingAgentId(string(id))
 }
@@ -38,6 +47,7 @@ type System struct {
 	orderingAgents  map[OrderingAgentId]*OrderingAgent
 	orders          map[OrderId]*Order
 	consumers       map[ConsumerId]Consumer
+	cycleCounter    uint
 }
 
 func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []ProducingAgentConfig, consumers map[ConsumerId]Consumer) *System {
@@ -59,6 +69,7 @@ func NewSystem(idGen OrderIdGenerator, emission Tokens, ps []ProcessSheet, pa []
 		map[OrderingAgentId]*OrderingAgent{},
 		map[OrderId]*Order{},
 		consumers,
+		0,
 	}
 	s.producerInfos = lo.MapEntries(s.producingAgents, func(id ProducerId, ps *ProducingAgent) (ProducerId, ProducerInfo) {
 		return id, ps.Info()
@@ -163,6 +174,7 @@ func (s *System) startCycle() {
 	s.state = SystemStateOrdersPlacement
 	s.emit()
 	s.placeComsumersOrders()
+	s.cycleCounter++
 }
 
 func distibuteInvestmentFund(orders map[OrderId]*Order, investmentFund Tokens) {
@@ -268,4 +280,23 @@ func (s *System) CompleteCycle() (CycleResult, error) {
 type ProcessSheet struct {
 	Product Product                   `json:"product"`
 	Require map[CapacityType]Capacity `json:"require"`
+}
+
+func (s *System) GetProducerInfos() map[ProducerId]ProducerInfo {
+	return s.producerInfos
+}
+
+func (s *System) GetOrderingAgentInfos() map[OrderingAgentId]OrderingAgentInfo {
+	result := make(map[OrderingAgentId]OrderingAgentInfo, len(s.orderingAgents))
+	for id := range s.orderingAgents {
+		result[id] = OrderingAgentInfo{id}
+	}
+	return result
+}
+
+func (s *System) GetSystemInfo() SystemInfo {
+	return SystemInfo{
+		State:        s.state,
+		CycleCounter: s.cycleCounter,
+	}
 }

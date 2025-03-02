@@ -67,8 +67,8 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 						return string(ct), int64(cap)
 					})
 				}),
-				lo.MapEntries(result.Producers, func(oid domain.CapacityType, val map[domain.ProducerId]domain.ProducerInfo) (string, map[string]models.ProducingAgentInfo) {
-					return string(oid), lo.MapEntries(val, func(pId domain.ProducerId, pInfo domain.ProducerInfo) (string, models.ProducingAgentInfo) {
+				lo.MapEntries(result.Producers, func(ct domain.CapacityType, val map[domain.ProducerId]domain.ProducerInfo) (string, map[string]models.ProducingAgentInfo) {
+					return string(ct), lo.MapEntries(val, func(pId domain.ProducerId, pInfo domain.ProducerInfo) (string, models.ProducingAgentInfo) {
 						return string(pId), models.ProducingAgentInfo{
 							int64(pInfo.Capacity),
 							string(pInfo.CapacityType),
@@ -88,42 +88,64 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 				return middleware.Error(http.StatusBadRequest, err.Error())
 			}
 			return operations.NewGetProducingAgentViewOK().WithPayload(&models.ProducingAgentView{
-				Capacity:           int64(result.Capacity),
-				Degradation:        int64(result.Degradation),
-				ID:                 string(result.Id),
-				MaxCapacity:        int64(result.MaxCapacity),
-				RequestedCapacity:  int64(result.RequestedCapacity),
-				Upgrade:            int64(result.Upgrade),
-				Restoration:        int64(result.Restoration),
-				UpgradeRunning:     bool(result.UpgradeRunning),
-				RestorationRunning: bool(result.RestorationRunning),
+				int64(result.Capacity),
+				int64(result.Degradation),
+				string(result.Id),
+				int64(result.MaxCapacity),
+				int64(result.RequestedCapacity),
+				int64(result.Restoration),
+				bool(result.RestorationRunning),
+				int64(result.Upgrade),
+				bool(result.UpgradeRunning),
 			})
 		})
 	}
 	if api.GetSystemInfoHandler == nil {
 		api.GetSystemInfoHandler = operations.GetSystemInfoHandlerFunc(func(params operations.GetSystemInfoParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.GetSystemInfo has not yet been implemented")
+			info := emulator.GetSystemInfo()
+			return operations.NewGetSystemInfoOK().WithPayload([]*models.SystemInfo{
+				&info,
+			})
 		})
 	}
 	if api.ListOrderingAgentsHandler == nil {
 		api.ListOrderingAgentsHandler = operations.ListOrderingAgentsHandlerFunc(func(params operations.ListOrderingAgentsParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.ListOrderingAgents has not yet been implemented")
+			orderingAgents := emulator.GetOrderingAgentInfos()
+			result := make([]*models.OrderingAgentInfo, 0, len(orderingAgents))
+			for _, info := range orderingAgents {
+				result = append(result, &models.OrderingAgentInfo{
+					string(info.Id),
+				})
+			}
+			return operations.NewListOrderingAgentsOK().WithPayload(result)
 		})
 	}
 	if api.ListProducingAgentsHandler == nil {
 		api.ListProducingAgentsHandler = operations.ListProducingAgentsHandlerFunc(func(params operations.ListProducingAgentsParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.ListProducingAgents has not yet been implemented")
+			producerInfos := emulator.GetProducerInfos()
+			result := make([]*models.ProducingAgentInfo, 0, len(producerInfos))
+			for _, info := range producerInfos {
+				result = append(result, &models.ProducingAgentInfo{
+					int64(info.Capacity),
+					string(info.CapacityType),
+					int64(info.CutOffPrice),
+					string(info.Id),
+					int64(info.MaxCapacity),
+				})
+			}
+			return operations.NewListProducingAgentsOK().WithPayload(result)
 		})
 	}
 	if api.TokenomicsResetSystemHandler == nil {
 		api.TokenomicsResetSystemHandler = tokenomics.ResetSystemHandlerFunc(func(params tokenomics.ResetSystemParams) middleware.Responder {
-			return middleware.NotImplemented("operation tokenomics.ResetSystem has not yet been implemented")
+			emulator.Reset()
+			return tokenomics.NewResetSystemOK()
 		})
 	}
 	if api.SendOrderingAgentCommandHandler == nil {
 		api.SendOrderingAgentCommandHandler = operations.SendOrderingAgentCommandHandlerFunc(func(params operations.SendOrderingAgentCommandParams) middleware.Responder {
 			err := emulator.OrderingAgentAction(domain.OrderingAgentId(params.ID), domain.OrderingAgentCommand{
-				Orders: lo.MapEntries(params.Body.Orders, func(orderId string, producers map[string]int64) (domain.OrderId, map[domain.ProducerId]domain.Tokens) {
+				lo.MapEntries(params.Body.Orders, func(orderId string, producers map[string]int64) (domain.OrderId, map[domain.ProducerId]domain.Tokens) {
 					return domain.OrderId(orderId), lo.MapEntries(producers, func(producerId string, tokens int64) (domain.ProducerId, domain.Tokens) {
 						return domain.ProducerId(producerId), domain.Tokens(tokens)
 					})
@@ -138,8 +160,8 @@ func configureAPI(api *operations.TokenomicsAPI) http.Handler {
 	if api.SendProducingAgentCommandHandler == nil {
 		api.SendProducingAgentCommandHandler = operations.SendProducingAgentCommandHandlerFunc(func(params operations.SendProducingAgentCommandParams) middleware.Responder {
 			err := emulator.ProducingAgentAction(domain.ProducerId(params.ID), domain.ProducingAgentCommand{
-				DoRestoration: params.Body.DoRestoration,
-				DoUpgrade:     params.Body.DoUpgrade,
+				params.Body.DoRestoration,
+				params.Body.DoUpgrade,
 			})
 			if err != nil {
 				return middleware.Error(http.StatusBadRequest, err.Error())

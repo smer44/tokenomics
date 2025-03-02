@@ -66,14 +66,14 @@ paths:
   /ordering-agents:
     get:
       operationId: listOrderingAgents
-      summary: Get producer agens list
+      summary: Get ordering agents list
       responses:
         200:
           description: OK
           schema:
             type: array
             items:
-              $ref: "#/definitions/ProducingAgentInfo"
+              $ref: "#/definitions/OrderingAgentInfo"
 
   /ordering-agents/{id}:
     parameters:
