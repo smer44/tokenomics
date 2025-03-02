@@ -1,5 +1,18 @@
 #!/bin/bash
 
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Icons
+INFO_ICON="💡"
+SUCCESS_ICON="✅"
+WARNING_ICON="⚠️ "
+ERROR_ICON="❌"
+
 # Hardcoded GitHub repository path
 IMAGE_NAME="ghcr.io/smer44/tokenomics"
 
@@ -17,9 +30,9 @@ CONTAINER_NAME="tokenomics"
 
 # Cleanup function
 cleanup() {
-    echo -e "\nReceived interrupt signal. Cleaning up..."
+    echo -e "\n${WARNING_ICON} ${YELLOW}Received interrupt signal. Cleaning up...${NC}"
     if [ "$DETACH" = true ]; then
-        echo "Stopping and removing container..."
+        echo -e "${INFO_ICON} ${BLUE}Stopping and removing container...${NC}"
         docker stop "$CONTAINER_NAME" >/dev/null 2>&1
         docker rm "$CONTAINER_NAME" >/dev/null 2>&1
     fi
@@ -66,7 +79,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            echo "Unknown option: $1"
+            echo -e "${ERROR_ICON} ${RED}Unknown option: $1${NC}"
             show_help
             exit 1
             ;;
@@ -81,13 +94,13 @@ TAG=$(echo "$TAG" | sed 's/[^a-zA-Z0-9]/-/g')
 
 # Check if container already exists and remove it
 if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    echo "Found existing container. Removing it..."
+    echo -e "${INFO_ICON} ${BLUE}Found existing container. Removing it...${NC}"
     docker stop "$CONTAINER_NAME" >/dev/null 2>&1
     docker rm "$CONTAINER_NAME" >/dev/null 2>&1
 fi
 
 # Pull the latest version of the image
-echo "Pulling image ${IMAGE_NAME}:${TAG}..."
+echo -e "${INFO_ICON} ${BLUE}Pulling image ${IMAGE_NAME}:${TAG}...${NC}"
 docker pull "${IMAGE_NAME}:${TAG}"
 
 # Prepare docker run command
@@ -96,26 +109,21 @@ if [ "$DETACH" = true ]; then
     DOCKER_CMD="$DOCKER_CMD -d"
 fi
 
+# Print access information before starting the container
+echo -e "\n${SUCCESS_ICON} ${GREEN}Starting container...${NC}"
+echo -e "${INFO_ICON} ${BLUE}Access the application:${NC}"
+echo -e "  📚 Swagger UI      : ${GREEN}http://localhost:${PORT}/docs${NC}"
+echo -e "\n${INFO_ICON} ${BLUE}To view logs, run:${NC} ${GREEN}docker logs $CONTAINER_NAME${NC}"
+echo -e "${INFO_ICON} ${YELLOW}Press Ctrl+C to stop and remove the container${NC}"
+
 # Run the container
-echo "Starting container on port ${PORT}..."
 $DOCKER_CMD \
     --name "$CONTAINER_NAME" \
     -p "${PORT}:8080" \
     --restart unless-stopped \
     "${IMAGE_NAME}:${TAG}"
 
-echo "Container started! The service is available at http://localhost:${PORT}"
-
+# Exit immediately in detached mode
 if [ "$DETACH" = true ]; then
-    echo "Container is running in detached mode."
-    echo "To view logs, run: docker logs $CONTAINER_NAME"
-    echo "Press Ctrl+C to stop and remove the container"
-    
-    # Wait for interrupt in detached mode
-    while true; do
-        sleep 1
-    done
-else
-    echo "Container is running in attached mode."
-    echo "Press Ctrl+C to stop the container"
+    exit 0
 fi 
